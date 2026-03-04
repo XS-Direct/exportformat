@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ExportModel {
+  id             Int      @id @default(autoincrement())
+  title          String
+  type           String   @default("download") // download | export
+  outputFormat   String   @default("custom")   // json | custom
+  codeBefore     String   @db.Text
+  repeatingCode  String   @db.Text
+  codeAfter      String?  @db.Text
+  mockFields     String?  @db.LongText // JSON: array of mock field definitions
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("export_models")
+}
