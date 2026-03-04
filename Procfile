@@ -1,1 +1,1 @@
-web: npx prisma migrate deploy && node .output/server/index.mjs
+web: npx prisma migrate deploy && npm start
