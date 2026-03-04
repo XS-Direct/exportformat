@@ -1,10 +1,10 @@
-import { prisma } from '~/server/utils/prisma'
+import { usePrisma } from '~/server/utils/prisma'
 
 export default defineEventHandler(async (event) => {
   const id = Number(getRouterParam(event, 'id'))
   const body = await readBody(event)
 
-  return await prisma.exportModel.update({
+  return await usePrisma().exportModel.update({
     where: { id },
     data: {
       title: body.title,

@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { defineConfig } from 'prisma/config'
 
 export default defineConfig({
@@ -7,6 +8,6 @@ export default defineConfig({
     migrations: 'prisma/migrations',
   },
   datasource: {
-    url: process.env.DATABASE_URL!,
+    url: process.env.DATABASE_URL || `file:${path.join(__dirname, 'prisma', 'dev.db')}`,
   },
 })

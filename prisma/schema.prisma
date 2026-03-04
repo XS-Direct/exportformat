@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
 }
 
 model ExportModel {
@@ -11,10 +11,10 @@ model ExportModel {
   title          String
   type           String   @default("download") // download | export
   outputFormat   String   @default("custom")   // json | custom
-  codeBefore     String   @db.Text
-  repeatingCode  String   @db.Text
-  codeAfter      String?  @db.Text
-  mockFields     String?  @db.LongText // JSON: array of mock field definitions
+  codeBefore     String
+  repeatingCode  String
+  codeAfter      String?
+  mockFields     String? // JSON: array of mock field definitions
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

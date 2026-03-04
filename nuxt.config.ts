@@ -4,8 +4,8 @@ export default defineNuxtConfig({
   ssr: false,
   compatibilityDate: '2024-11-01',
   nitro: {
-    externals: {
-      external: ['@prisma/client'],
+    rollupConfig: {
+      external: ['@prisma/client', '@prisma/adapter-better-sqlite3', 'better-sqlite3'],
     },
   },
 })

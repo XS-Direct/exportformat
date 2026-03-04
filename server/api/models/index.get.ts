@@ -1,7 +1,7 @@
-import { prisma } from '~/server/utils/prisma'
+import { usePrisma } from '~/server/utils/prisma'
 
 export default defineEventHandler(async () => {
-  return await prisma.exportModel.findMany({
+  return await usePrisma().exportModel.findMany({
     orderBy: { updatedAt: 'desc' },
   })
 })
