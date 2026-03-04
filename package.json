@@ -8,6 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "heroku-postbuild": "prisma generate && nuxt build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:studio": "prisma studio"
@@ -21,13 +22,16 @@
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^7.4.2",
+    "prisma": "^7.4.2",
     "nuxt": "^3.21.1",
     "vue": "^3.5.29",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.14.0",
-    "prisma": "^7.4.2",
     "tailwindcss": "^3.4.19"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
