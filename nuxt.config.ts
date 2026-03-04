@@ -3,4 +3,9 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   ssr: false,
   compatibilityDate: '2024-11-01',
+  nitro: {
+    externals: {
+      inline: ['@prisma/client'],
+    },
+  },
 })
