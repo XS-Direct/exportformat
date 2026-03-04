@@ -5,5 +5,3 @@ dist/
 .env
 *.local
 src/generated/
-prisma/dev.db
-prisma/dev.db-journal

@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   nitro: {
     rollupConfig: {
-      external: ['@prisma/client', '@prisma/adapter-better-sqlite3', 'better-sqlite3'],
+      external: ['@prisma/client', '@prisma/adapter-mariadb', 'mariadb'],
     },
   },
 })
