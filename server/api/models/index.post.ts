@@ -1,9 +1,9 @@
-import { prisma } from '~/server/utils/prisma'
+import { usePrisma } from '~/server/utils/prisma'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
 
-  return await prisma.exportModel.create({
+  return await usePrisma().exportModel.create({
     data: {
       title: body.title || 'Nieuw model',
       type: body.type || 'download',
