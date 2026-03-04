@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   nitro: {
     externals: {
-      inline: ['@prisma/client'],
+      external: ['@prisma/client'],
     },
   },
 })
