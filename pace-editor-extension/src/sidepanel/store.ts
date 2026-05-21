@@ -179,16 +179,26 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
+  const copiedToClipboard = ref(false)
+
   async function sendRepeatingCode(): Promise<void> {
     writing.value = true
     writeError.value = null
+    copiedToClipboard.value = false
     try {
       const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
         type: 'PACE_WRITE_REPEATING_CODE',
         value: repeatingCode.value,
       })
       if (!reply || reply.ok !== true) {
-        writeError.value = reply?.error ?? 'Write failed'
+        // Textarea not found — copy to clipboard instead
+        try {
+          await navigator.clipboard.writeText(repeatingCode.value)
+          copiedToClipboard.value = true
+          writeError.value = 'Textarea niet gevonden. Code is naar clipboard gekopieerd — maak het model aan in Pace en plak het.'
+        } catch {
+          writeError.value = reply?.error ?? 'Write failed'
+        }
         return
       }
       if (snapshot.value) snapshot.value.repeatingCode = repeatingCode.value
@@ -257,6 +267,7 @@ export const useEditorStore = defineStore('editor', () => {
     loadError,
     writing,
     writeError,
+    copiedToClipboard,
     catalog,
     codeBefore,
     repeatingCode,

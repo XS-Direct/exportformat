@@ -36,7 +36,8 @@ async function send(): Promise<void> {
     </div>
     <p
       v-if="store.writeError"
-      class="mt-1 text-xs text-rose-700"
+      class="mt-1 text-xs"
+      :class="store.copiedToClipboard ? 'text-amber-700' : 'text-rose-700'"
     >{{ store.writeError }}</p>
   </footer>
 </template>
