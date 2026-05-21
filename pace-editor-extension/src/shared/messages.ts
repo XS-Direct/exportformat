@@ -23,6 +23,7 @@ export type ExtensionMessage =
   | { type: 'PACE_WRITE_REPEATING_CODE'; value: string }
   | { type: 'PACE_WRITE_RESULT'; ok: boolean; error?: string }
   | { type: 'PACE_CONTEXT_LOST' }
+  | { type: 'PACE_CHECK_UPDATE' }
 
 export type ExtensionResponse =
   | { ok: true }

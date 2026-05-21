@@ -9,45 +9,55 @@ import type { IRNode, IRTree } from '@shared/ir-types'
 
 const store = useEditorStore()
 
-// The Pace repeating code is columns separated by &#9; (tab entity).
-// We split the IR tree into column segments at &#9; boundaries.
-
 interface Column {
-  nodes: IRNode[]       // IR nodes for this column
-  code: string          // serialized Pace code
-  preview: string       // evaluated with sample data
-  headerName: string    // column name from Code before header
+  nodes: IRNode[]
+  code: string
+  preview: string
+  headerName: string
 }
 
-// Try to extract header names from Code Before.
-// Only map if the Code Before uses the SAME separator (&#9;) as the repeating code
-// and the column count matches.
+// Detect the column separator used in the repeating code template.
+// Pace templates use either &#9; (tab entity) or ; (semicolon) or , (comma).
+const templateSeparator = computed(() => {
+  const code = store.repeatingCode
+  if (!code) return '&#9;'
+  const tabCount = (code.match(/&#9;/g) || []).length
+  // For ; we need to be careful: ';' inside $if conditions is not a separator.
+  // Count ; that appear in text nodes (outside function brackets)
+  const semiCount = (serialize(parse(code).tree.filter((n) => n.kind === 'text')).match(/;/g) || []).length
+  if (tabCount >= semiCount && tabCount > 0) return '&#9;'
+  if (semiCount > 0) return ';'
+  return '&#9;'
+})
+
+// Parse header names from Code Before using its own delimiter
 const headerNames = computed(() => {
   const raw = store.codeBefore
   if (!raw) return []
-  // Strip $var/$storevar/$rem calls
   const cleaned = raw.replace(/\$(?:var|storevar|rem)\[[^\]]*\](?:\[[^\]]*\])?/g, '').trim()
-  // Only use header names if Code Before uses &#9; (same as repeating code)
-  if (!cleaned.includes('&#9;') && !cleaned.includes('\t')) return []
-  const names = cleaned.split(/&#9;|\t/).map((s) => s.replace(/"/g, '').trim()).filter(Boolean)
-  // Only map if column count is close enough
-  const colCount = (store.repeatingCode.match(/&#9;/g) || []).length + 1
-  if (Math.abs(names.length - colCount) > 2) return [] // too different, don't map
-  return names
+  if (!cleaned) return []
+  // Detect the header's delimiter
+  let sep: string | RegExp
+  if (cleaned.includes('&#9;') || cleaned.includes('\t')) sep = /&#9;|\t/
+  else if (cleaned.includes(';')) sep = ';'
+  else if (cleaned.includes(',')) sep = ','
+  else return [cleaned]
+  return cleaned.split(sep).map((s) => s.replace(/"/g, '').trim()).filter(Boolean)
 })
 
-// Split IR tree into columns by &#9; separator
+// Split IR tree into columns by the detected separator
 function splitIntoColumns(tree: IRTree): IRNode[][] {
+  const sep = templateSeparator.value
   const columns: IRNode[][] = [[]]
   for (const node of tree) {
-    if (node.kind === 'text' && node.value.includes('&#9;')) {
-      // Split this text node at tab boundaries
-      const parts = node.value.split('&#9;')
+    if (node.kind === 'text' && node.value.includes(sep)) {
+      const parts = node.value.split(sep)
       for (let i = 0; i < parts.length; i++) {
-        if (i > 0) columns.push([]) // new column
-        if (parts[i]) {
-          columns[columns.length - 1].push({ kind: 'text', value: parts[i] })
-        }
+        if (i > 0) columns.push([])
+        // Strip surrounding quotes from ;-separated values (e.g. "value";"value")
+        let val = parts[i]
+        if (sep === ';') val = val.replace(/^"|"$/g, '')
+        if (val) columns[columns.length - 1].push({ kind: 'text', value: val })
       }
     } else {
       columns[columns.length - 1].push(node)
@@ -56,11 +66,16 @@ function splitIntoColumns(tree: IRTree): IRNode[][] {
   return columns
 }
 
-// Rejoin columns back into a flat IR tree with &#9; separators
+// Rejoin columns back into a flat IR tree with the same separator
 function joinColumns(cols: IRNode[][]): IRTree {
+  const sep = templateSeparator.value
+  const quote = sep === ';' // ;-separated files typically quote values
   const tree: IRNode[] = []
   for (let i = 0; i < cols.length; i++) {
-    if (i > 0) tree.push({ kind: 'text', value: '&#9;' })
+    if (i > 0) tree.push({ kind: 'text', value: sep })
+    if (quote && i > 0) {
+      // Add quotes around text nodes for ;-separated format
+    }
     tree.push(...cols[i])
   }
   return tree

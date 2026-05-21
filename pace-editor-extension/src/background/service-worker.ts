@@ -1,6 +1,43 @@
 import type { ExtensionMessage } from '../shared/messages'
 import { loadConfiguredHosts, BUILTIN_HOSTS } from '../shared/hosts'
 
+// --- Auto-update check ---
+const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
+const GITHUB_REPO = 'XS-Direct/exportformat'
+const PACKAGE_PATH = 'pace-editor-extension/package.json'
+
+async function checkForUpdate(): Promise<void> {
+  try {
+    const currentVersion = chrome.runtime.getManifest().version
+    const resp = await fetch(
+      `https://raw.githubusercontent.com/${GITHUB_REPO}/main/${PACKAGE_PATH}`,
+      { cache: 'no-store' },
+    )
+    if (!resp.ok) return
+    const pkg = await resp.json()
+    const remoteVersion = pkg.version
+    if (remoteVersion && remoteVersion !== currentVersion) {
+      console.log(`[pace-editor] Update available: ${currentVersion} → ${remoteVersion}`)
+      await chrome.storage.local.set({
+        'pace.update': { current: currentVersion, remote: remoteVersion, checkedAt: Date.now() },
+      })
+      // Show badge on extension icon
+      chrome.action.setBadgeText({ text: '!' })
+      chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' })
+    } else {
+      await chrome.storage.local.remove('pace.update')
+      chrome.action.setBadgeText({ text: '' })
+    }
+  } catch (err) {
+    console.warn('[pace-editor] update check failed:', err)
+  }
+}
+
+// Check on install/startup and then periodically
+chrome.runtime.onInstalled.addListener(() => void checkForUpdate())
+chrome.runtime.onStartup.addListener(() => void checkForUpdate())
+setInterval(() => void checkForUpdate(), UPDATE_CHECK_INTERVAL)
+
 const DYNAMIC_SCRIPT_ID = 'pace-editor-dynamic'
 
 // Allow the toolbar icon to toggle the side panel on Pace tabs.
@@ -86,8 +123,29 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
       console.log('[pace-editor][bg] got reply from content:', reply?.ok, 'error:', reply?.error)
       sendResponse(reply)
     } catch (err) {
-      console.error('[pace-editor][bg] sendMessage failed:', (err as Error).message)
-      sendResponse({ ok: false, error: (err as Error).message })
+      const errMsg = (err as Error).message
+      // "Receiving end does not exist" = content script not loaded (e.g. after
+      // extension reload). Inject it on the fly and retry once.
+      if (errMsg.includes('Receiving end does not exist')) {
+        console.warn('[pace-editor][bg] content script not loaded, injecting...')
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['src/content/index.ts'],
+          })
+          // Wait briefly for the script to initialize
+          await new Promise((r) => setTimeout(r, 300))
+          const retry = await chrome.tabs.sendMessage(tab.id, message)
+          console.log('[pace-editor][bg] retry succeeded:', retry?.ok)
+          sendResponse(retry)
+        } catch (retryErr) {
+          console.error('[pace-editor][bg] inject+retry failed:', (retryErr as Error).message)
+          sendResponse({ ok: false, error: (retryErr as Error).message })
+        }
+      } else {
+        console.error('[pace-editor][bg] sendMessage failed:', errMsg)
+        sendResponse({ ok: false, error: errMsg })
+      }
     }
   })()
   return true

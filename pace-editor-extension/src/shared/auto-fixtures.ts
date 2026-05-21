@@ -67,65 +67,100 @@ function fakeDate(index: number): string {
   return `2025-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-// Each generator matches field labels (case-insensitive) and produces data.
+// Generators are matched in ORDER — more specific patterns MUST come first.
 const GENERATORS: FieldGenerator[] = [
-  // Identity
-  { pattern: /\bid\b/i, generate: (i) => String(10000 + i) },
+  // --- Specific compound patterns first (before generic ones) ---
+
+  // Method override export (boolean flag) — before "method" and "export"
+  { pattern: /method\s*override\s*export/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
+  // Method override (string) — before generic "method"
+  { pattern: /method\s*override/i, generate: (i) => ['door-to-door', 'face-to-face', 'event'][i % 3] },
+  // Shift Method — before generic "method"
+  { pattern: /shift.*method|method/i, generate: (i) => ['door-to-door', 'face-to-face', 'event'][i % 3] },
+
+  // Phone: Status — before generic "phone" and "status"
+  { pattern: /phone.*status/i, generate: () => 'valid' },
+  // Phone: Opt in — before generic "phone" and "opt in"
+  { pattern: /phone.*opt\s*in/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
+  // Phone: Main number — before generic "phone"
+  { pattern: /main\s*number|phone.*number|telefoon|mobiel/i, generate: (i) => `06${String(12345670 + i).padStart(8, '0')}` },
+
+  // Email: Opt in — before generic "email" and "opt in"
+  { pattern: /email.*opt\s*in/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
+  // Email: Address — before generic "email"
+  { pattern: /email.*address|emailadres|e-?mail/i, generate: (i) => `test${i + 1}@example.com` },
+
+  // Date of birth — before generic "date"
+  { pattern: /date\s*of\s*birth|geboortedatum|birth/i, generate: (i) => `19${70 + (i % 30)}-${String((i % 12) + 1).padStart(2, '0')}-15` },
+  // Export date — before generic "date"
+  { pattern: /export\s*date|call\s*lock\s*date/i, generate: fakeDate },
+
+  // House number addition — before generic "house number"
+  { pattern: /house\s*number\s*add|huisnummer.*toevoeging/i, generate: (i) => i % 3 === 0 ? 'A' : '' },
+
+  // Company: id — before generic "id"
+  { pattern: /company.*id/i, generate: (i) => String(12000 + i) },
+  // Company: Name
+  { pattern: /company.*name/i, generate: (i) => i % 2 === 0 ? 'SaleslinQ' : 'People Marketing' },
+  // Employee: id — before generic "id"
+  { pattern: /employee.*id/i, generate: (i) => String(5000 + i) },
+  // Project: id — before generic "id"
+  { pattern: /project.*id/i, generate: (i) => [60, 88, 141, 204, 205, 206, 207, 208][i % 8] + '' },
+
+  // Bank account: IBAN — before generic patterns
+  { pattern: /iban|bank\s*account/i, generate: (i) => `NL${String(10 + i).padStart(2, '0')}INGB0001234${String(i).padStart(3, '0')}` },
+
+  // Country code — before generic "land"
+  { pattern: /country\s*code|landcode/i, generate: () => 'NL' },
+
+  // Full name — before "name"
+  { pattern: /full\s*name/i, generate: (i) => `${pick(FIRST_NAMES_M, i)} ${pick(LAST_NAMES, i)}` },
+
+  // --- Generic patterns ---
+
+  // Identity (only match if "id" is the LAST segment, e.g. "471: id" or "employee: id")
+  { pattern: /:\s*id\}?$|\bid\}?$/i, generate: (i) => String(10000 + i) },
 
   // Sex / Gender
   { pattern: /\bsex\b|\bgender\b|\bgeslacht\b/i, generate: (i) => i % 2 === 0 ? 'male' : 'female' },
 
   // Name fields
-  { pattern: /\bfirst\s*name\b|\bvoornaam\b/i, generate: (i) => i % 2 === 0 ? pick(FIRST_NAMES_M, i) : pick(FIRST_NAMES_F, i) },
-  { pattern: /\binitials?\b|\bvoorletters?\b/i, generate: (i) => i % 2 === 0 ? pick(FIRST_NAMES_M, i)[0] + '.' : pick(FIRST_NAMES_F, i)[0] + '.' },
-  { pattern: /\blast\s*name\b|\bachternaam\b/i, generate: (i) => pick(LAST_NAMES, i) },
-  { pattern: /\bprefix\b|\btussenvoegsel\b|\bmiddle\b/i, generate: (i) => i % 3 === 0 ? 'van' : i % 3 === 1 ? 'de' : '' },
-  { pattern: /\bfull\s*name\b/i, generate: (i) => `${pick(FIRST_NAMES_M, i)} ${pick(LAST_NAMES, i)}` },
-  { pattern: /\bsalutation\b|\baanhef\b/i, generate: (i) => i % 2 === 0 ? 'Dhr.' : 'Mevr.' },
+  { pattern: /first\s*name|voornaam/i, generate: (i) => i % 2 === 0 ? pick(FIRST_NAMES_M, i) : pick(FIRST_NAMES_F, i) },
+  { pattern: /initials?|voorletters?/i, generate: (i) => i % 2 === 0 ? pick(FIRST_NAMES_M, i)[0] + '.' : pick(FIRST_NAMES_F, i)[0] + '.' },
+  { pattern: /last\s*name|achternaam/i, generate: (i) => pick(LAST_NAMES, i) },
+  { pattern: /\bprefix\b|tussenvoegsel|middle/i, generate: (i) => i % 3 === 0 ? 'van' : i % 3 === 1 ? 'de' : '' },
+  { pattern: /salutation|aanhef|title/i, generate: (i) => i % 2 === 0 ? 'Dhr.' : 'Mevr.' },
 
   // Address
-  { pattern: /\bstreet\b|\bstraat\b/i, generate: (i) => pick(STREETS, i) },
-  { pattern: /\bhouse\s*number\s*add/i, generate: (i) => i % 3 === 0 ? 'A' : '' },
-  { pattern: /\bhouse\s*number\b|\bhuisnummer\b/i, generate: (i) => String(10 + i * 7) },
-  { pattern: /\bpostal\s*code\b|\bpostcode\b/i, generate: (i) => pick(POSTAL_CODES, i) },
-  { pattern: /\bcity\b|\bplaats\b|\bwoonplaats\b/i, generate: (i) => pick(CITIES, i) },
-  { pattern: /\bcountry\s*code\b|\bland(code)?\b/i, generate: () => 'NL' },
-
-  // Contact
-  { pattern: /\bemail\b|\be-?mail\b/i, generate: (i) => `test${i + 1}@example.com` },
-  { pattern: /\bphone\b|\btelefoon\b|\bmobiel\b|\bmain\s*number\b/i, generate: (i) => `06${String(12345670 + i).padStart(8, '0')}` },
-  { pattern: /\bphone.*status\b/i, generate: () => 'valid' },
+  { pattern: /street|straat/i, generate: (i) => pick(STREETS, i) },
+  { pattern: /house\s*number|huisnummer/i, generate: (i) => String(10 + i * 7) },
+  { pattern: /postal\s*code|postcode/i, generate: (i) => pick(POSTAL_CODES, i) },
+  { pattern: /\bcity\b|plaats|woonplaats/i, generate: (i) => pick(CITIES, i) },
+  { pattern: /\bland\b|country/i, generate: () => 'NL' },
 
   // Financial
-  { pattern: /\bamount\b|\bbedrag\b/i, generate: (i) => String(5 + i * 2.5) },
-  { pattern: /\biban\b|\bbank\s*account\b/i, generate: (i) => `NL${String(10 + i).padStart(2, '0')}INGB0001234${String(i).padStart(3, '0')}` },
-  { pattern: /\bfrequen(cy|tie)\b/i, generate: (i) => i % 3 === 0 ? 'month' : i % 3 === 1 ? 'single' : 'month' },
+  { pattern: /amount|bedrag/i, generate: (i) => String(5 + i * 2.5) },
+  { pattern: /frequen(cy|tie)/i, generate: (i) => i % 3 === 0 ? 'month' : i % 3 === 1 ? 'single' : 'month' },
 
-  // Date fields
-  { pattern: /\bdate\s*of\s*birth\b|\bgeboortedatum\b/i, generate: (i) => `19${70 + (i % 30)}-${String((i % 12) + 1).padStart(2, '0')}-15` },
-  { pattern: /\bdate\b|\bdatum\b/i, generate: fakeDate },
+  // Date (generic — after specific date patterns)
+  { pattern: /\bdate\b|datum/i, generate: fakeDate },
 
-  // Status
+  // Status / Flags
   { pattern: /\bstatus\b/i, generate: () => 'valid' },
-  { pattern: /\bopt\s*in\b/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
-  { pattern: /\bwelcome\s*call\b/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
+  { pattern: /\bexported\b/i, generate: () => '0' },
+  { pattern: /\bexport\s*skip\b/i, generate: () => '0' },
+  { pattern: /opt\s*in/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
+  { pattern: /welcome\s*call/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
+  { pattern: /\bflagged\b/i, generate: () => '0' },
+  { pattern: /cancel\s*reason|quality\s*reason|status\s*note/i, generate: () => '' },
+  { pattern: /flag\s*note/i, generate: () => '' },
+  { pattern: /extra\s*field\s*one/i, generate: () => '' },
 
-  // Project / Method
-  { pattern: /\bproject.*id\b/i, generate: (i) => String(200 + (i % 10)) },
-  { pattern: /\bmethod\s*override\s*export\b/i, generate: (i) => i % 2 === 0 ? '1' : '0' },
-  { pattern: /\bmethod\s*override\b|\bmethod\}?$/i, generate: (i) => i % 3 === 0 ? 'door-to-door' : i % 3 === 1 ? 'face-to-face' : 'event' },
-  { pattern: /\bshift.*method\b|\bmethod\b/i, generate: (i) => i % 3 === 0 ? 'door-to-door' : i % 3 === 1 ? 'face-to-face' : 'event' },
-
-  // Company / Employee
-  { pattern: /\bcompany.*id\b/i, generate: (i) => String(12000 + i) },
-  { pattern: /\bcompany.*name\b/i, generate: (i) => i % 2 === 0 ? 'SaleslinQ' : 'People Marketing' },
-  { pattern: /\bemployee.*id\b/i, generate: (i) => String(5000 + i) },
-
-  // Block name
-  { pattern: /\bblock\s*name\b/i, generate: () => 'main' },
-
-  // Week
+  // Block / Work ticket
+  { pattern: /block\s*name/i, generate: () => 'main' },
   { pattern: /\bweek\b/i, generate: (i) => String((i % 52) + 1) },
+  { pattern: /call\s*count/i, generate: () => '1' },
+  { pattern: /call\s*user/i, generate: (i) => String(100 + i) },
 ]
 
 function generateFieldValue(raw: string, index: number): string {

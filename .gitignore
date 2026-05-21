@@ -7,3 +7,6 @@ dist/
 src/generated/
 prisma/dev.db
 prisma/dev.db-journal
+
+# Legacy reference system — local only, not for GitHub
+legacy1202/
