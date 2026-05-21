@@ -1,133 +1,82 @@
 # Pace Visual Template Editor
 
-Chromium Manifest V3-extensie die op `https://pace-bp.xsdirect.nl/*` een visuele
-editor activeert voor de `Repeating code` van Pace-export-modellen. De extensie
-voorkomt onleesbare geneste `$ifelse`-ketens door alleen subtrees via UI te
-laten manipuleren — schrijven naar Pace gebeurt expliciet via "Send to Pace",
-de gebruiker drukt zelf op Pace's eigen save-knop.
+Chrome-extensie voor het visueel bewerken van Pace export-templates op `pace-bp.xsdirect.nl`.
 
-## Stack
+## Installeren
 
-- Manifest V3 + side panel API (Chrome 114+)
-- Vue 3 + Pinia + Vite + `@crxjs/vite-plugin`
-- TypeScript + Vitest + jsdom
-- TailwindCSS voor styling
-- Geen externe netwerk-calls, geen telemetry, alleen `chrome.storage.local`
+### Vereisten
 
-## Mappenstructuur
+- Google Chrome of Brave browser
+- [Node.js](https://nodejs.org/) 18 of hoger
+- Git
 
-```
-pace-editor-extension/
-├── manifest.config.ts         # MV3 manifest (gegenereerd door @crxjs)
-├── vite.config.ts
-├── src/
-│   ├── content/               # injectie + Pace DOM-adapter
-│   ├── background/            # service worker (msg-routing, side panel open)
-│   ├── sidepanel/             # Vue-app: editor, preview, simulator, settings
-│   ├── options/               # options-page (catalog-beheer)
-│   └── shared/                # parser, serializer, evaluator, IR, fixtures
-└── tests/                     # vitest (parser, round-trip, evaluator, DOM)
+### Stap 1 — Repository klonen
+
+```bash
+git clone https://github.com/XS-Direct/exportformat.git
+cd exportformat/pace-editor-extension
 ```
 
-## Ontwikkelen
+### Stap 2 — Bouwen
 
 ```bash
 npm install
-npm run dev         # Vite dev-server met HMR voor side panel + options
-npm test            # alle vitest-suites
-npm run typecheck   # vue-tsc strict mode
-npm run build       # productie-bundel in dist/
-npm run package     # bundel + zip naar pace-editor-extension.zip
+npm run build
 ```
 
-## Installeren als unpacked extensie
+### Stap 3 — Laden in Chrome
 
-1. `npm run build`
-2. Open `chrome://extensions` → enable Developer mode
-3. Klik **Load unpacked** → kies de `dist/` map
-4. Open `https://pace-bp.xsdirect.nl/#…&show=modelEdit`
-5. Boven de **Repeating code**-textarea verschijnt `✎ Open visual editor`
+1. Ga naar `chrome://extensions/`
+2. Zet **Developer mode** aan (schakelaar rechtsboven)
+3. Klik **Load unpacked**
+4. Selecteer de map `pace-editor-extension/dist`
 
-Zie [`docs/install.md`](docs/install.md) voor uitgebreidere instructies.
+### Stap 4 — Gebruiken
 
-## Round-trip-garantie
+1. Ga naar [Pace](https://pace-bp.xsdirect.nl/) en open een export model
+2. Klik op het extensie-icoon in de toolbar (puzzelstukje) → **Pace Visual Template Editor**
+3. Het side panel opent met de editor
 
-De parser produceert een Intermediate Representation (`src/shared/ir-types.ts`)
-waarvan `serialize(parse(x)) === x` geldt voor elke template die de parser
-accepteert. De corpus in `tests/roundtrip.test.ts` bevat onder andere de
-**hele productie-Aidsfonds-template**, byte-identical — wijzigingen aan parser
-of serializer die deze identiteit breken falen direct in CI.
+## Updaten
 
-## Pace template-syntax (samenvatting)
+Als er een update beschikbaar is, verschijnt er een gele banner in de extensie.
 
-| Construct | Voorbeeld | Toelichting |
-| --- | --- | --- |
-| Field ref | `{471: id}`, `{34-445: Person: Sex}` | Inhoud verbatim opgeslagen |
-| Var ref | `{var:count}` | Shorthand voor `$var[count]` |
-| Function call | `$func[arg1][arg2][arg3]` | Argumenten zijn aparte bracket-paren, géén comma-list |
-| Komma | `$substr[X][0, 4]` | Literal text binnen een arg (substr splitst zelf) |
-| Conditie-expressie | `{x} == 205 || {y} > 100 && 'a' == 'b'` | `==`, `!=`, `>`, `<`, `>=`, `<=`, `&&`, `\|\|`, single-quoted strings |
-| Datumformaat | `$date[{476}][%Y%m%d]` | strftime-stijl met `%`-prefix |
-| HTML tab | `&#9;` | Pace gebruikt deze entity als kolom-separator |
+```bash
+cd exportformat/pace-editor-extension
+git pull
+npm install
+npm run build
+```
 
-## Beveiliging
+Daarna in Chrome: `chrome://extensions/` → klik het **reload-icoon** (↻) bij de extensie.
 
-| Maatregel | Details |
-| --- | --- |
-| Host-restricted | Alleen `pace-bp.xsdirect.nl` in `host_permissions` |
-| Geen netwerk-calls | Parsing & evaluatie volledig in de browser |
-| Geen telemetry | Geen analytics, geen error-reporting |
-| Geen `tabs` permission | Kan geen andere tabs lezen |
-| Geen automatische save | Repeating code wordt pas geschreven na klik op "Send to Pace" |
-| Geen donor-data | Alleen IR (templates) + synthetische fixtures in storage |
-| CSP | `script-src 'self'`, geen `unsafe-eval` |
+## Functies
 
-## Acceptatie
-
-Zie het oorspronkelijke hand-off-document voor de acceptatiecriteria (a–g).
-De testsuite in `tests/` dekt:
-
-- parser correctness (`parser.test.ts`)
-- round-trip identity (`roundtrip.test.ts`)
-- evaluator semantics (`evaluator.test.ts`)
-- scenario rerouting (`scenarios.test.ts`)
-- Pace-DOM detectie + textarea-write (`pace-dom.test.ts`)
-
-Vervang de placeholder-fixtures in `src/shared/fixtures/` door de echte
-Aidsfonds- en Alzheimer NL-templates zodra je die uit Pace exporteert.
+- **Kolommen-editor** — bekijk en bewerk kolommen visueel, drag-and-drop
+- **Live preview** — zie direct hoe het exportbestand eruitziet (met testdata)
+- **Simulator** — test de template met automatisch gegenereerde data
+- **Visuele blokken** — bewerk $if/$ifelse condities, velden en functies visueel
+- **Raw editor** — directe toegang tot de ruwe Pace-code
+- **Send to Pace** — schrijf wijzigingen terug naar het Pace-formulier
 
 ## Sneltoetsen
 
 | Toets | Actie |
 | --- | --- |
-| `Ctrl/Cmd + Z` | Ongedaan maken (model-niveau) |
-| `Ctrl/Cmd + Shift + Z` of `Ctrl/Cmd + Y` | Opnieuw |
+| `Ctrl/Cmd + Z` | Ongedaan maken |
+| `Ctrl/Cmd + Shift + Z` | Opnieuw |
 
-Wanneer focus binnen een input/textarea staat, blijven de native browser-undo
-shortcuts werken op het tekst-niveau van dat veld.
+## Problemen?
 
-## Multi-host
+- **"Kon Pace niet uitlezen"** — Open eerst een export model in Pace, klik dan op **↻ Lezen**
+- **Verkeerd model geladen** — Klik op **↻ Lezen** terwijl het juiste model open staat in Pace
+- **Extensie reageert niet na update** — Reload de extensie op `chrome://extensions/`
 
-Voor opt-in hosts (bv. staging) levert het manifest `optional_host_permissions`
-op `https://*.xsdirect.nl/*`. Voeg op de options-pagina een host toe; de
-extensie vraagt expliciet permissie, registreert dynamisch het content script
-voor dat patroon en luistert vanaf dat moment ook daar. Permissie kan via
-dezelfde pagina worden ingetrokken.
+## Ontwikkelen
 
-## Drag-drop
-
-Iedere blok-header bevat een `⋮⋮`-handle. Versleep om binnen dezelfde
-sibling-lijst te herordenen. Cross-array verplaatsen (bv. een node uit
-`$if`'s then-tak naar de else-tak) gaat met de ↑/↓-knoppen — dat is bewust
-zo gehouden om subtiele DnD-bugs te vermijden.
-
-## Roadmap
-
-- Phase 0 – shared package + tests **(klaar)**
-- Phase 1 – content script + read-only side panel **(klaar)**
-- Phase 2 – visuele node-editor met add/remove/edit **(klaar)**
-- Phase 3 – simulator + CSV/TSV-download **(klaar)**
-- Phase 4 – UX-polish: drag-drop, undo/redo, multi-host config **(klaar)**
-- Open: echte Aidsfonds/Alzheimer NL-templates importeren in fixtures,
-  Pace-DOM-selectors empirisch valideren tegen de live UI, design-iconen
-  vervangen.
+```bash
+npm run dev         # Dev-server met hot reload
+npm run test        # Tests draaien
+npm run build       # Productie-build
+npm run package     # Build + ZIP voor distributie
+```

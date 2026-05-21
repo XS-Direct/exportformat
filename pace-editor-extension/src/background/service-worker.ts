@@ -1,39 +1,29 @@
 import type { ExtensionMessage } from '../shared/messages'
 import { loadConfiguredHosts, BUILTIN_HOSTS } from '../shared/hosts'
 
-// --- Auto-update check ---
+// --- Auto-update check (public GitHub repo, no token needed) ---
 const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
-const GITHUB_REPO = 'XS-Direct/exportformat'
-const PACKAGE_PATH = 'pace-editor-extension/package.json'
+const GITHUB_RAW = 'https://raw.githubusercontent.com/XS-Direct/exportformat/main/pace-editor-extension/package.json'
 
 async function checkForUpdate(): Promise<void> {
   try {
     const currentVersion = chrome.runtime.getManifest().version
-    const resp = await fetch(
-      `https://raw.githubusercontent.com/${GITHUB_REPO}/main/${PACKAGE_PATH}`,
-      { cache: 'no-store' },
-    )
+    const resp = await fetch(GITHUB_RAW, { cache: 'no-store' })
     if (!resp.ok) return
     const pkg = await resp.json()
-    const remoteVersion = pkg.version
-    if (remoteVersion && remoteVersion !== currentVersion) {
-      console.log(`[pace-editor] Update available: ${currentVersion} → ${remoteVersion}`)
-      await chrome.storage.local.set({
-        'pace.update': { current: currentVersion, remote: remoteVersion, checkedAt: Date.now() },
-      })
-      // Show badge on extension icon
+    const remote = pkg.version
+    if (remote && remote !== currentVersion) {
+      console.log(`[pace-editor] Update: ${currentVersion} → ${remote}`)
+      await chrome.storage.local.set({ 'pace.update': { current: currentVersion, remote, ts: Date.now() } })
       chrome.action.setBadgeText({ text: '!' })
       chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' })
     } else {
       await chrome.storage.local.remove('pace.update')
       chrome.action.setBadgeText({ text: '' })
     }
-  } catch (err) {
-    console.warn('[pace-editor] update check failed:', err)
-  }
+  } catch { /* silent */ }
 }
 
-// Check on install/startup and then periodically
 chrome.runtime.onInstalled.addListener(() => void checkForUpdate())
 chrome.runtime.onStartup.addListener(() => void checkForUpdate())
 setInterval(() => void checkForUpdate(), UPDATE_CHECK_INTERVAL)
