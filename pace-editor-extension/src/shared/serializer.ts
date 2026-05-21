@@ -19,9 +19,9 @@ function serializeNode(node: IRNode): string {
 
 function serializeFunc(node: FuncNode): string {
   if (node.args === null) return node.name
-  const parts: string[] = []
+  let out = node.name
   for (const arg of node.args) {
-    parts.push(arg.prefix + serialize(arg.nodes))
+    out += `[${serialize(arg.nodes)}]`
   }
-  return `${node.name}[${parts.join(',')}]`
+  return out
 }

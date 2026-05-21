@@ -40,9 +40,9 @@ function appendNew(kind: IRNode['kind']): void {
   if (kind === 'text') copy.push({ kind: 'text', value: '' })
   else if (kind === 'field') copy.push({ kind: 'field', raw: '471: id' })
   else copy.push({ kind: 'func', name: '$ifelse', args: [
-    { prefix: '', nodes: [] },
-    { prefix: ' ', nodes: [] },
-    { prefix: ' ', nodes: [] },
+    { nodes: [] },
+    { nodes: [] },
+    { nodes: [] },
   ] })
   props.onChange(copy)
 }

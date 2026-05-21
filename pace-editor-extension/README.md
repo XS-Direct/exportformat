@@ -54,9 +54,21 @@ Zie [`docs/install.md`](docs/install.md) voor uitgebreidere instructies.
 
 De parser produceert een Intermediate Representation (`src/shared/ir-types.ts`)
 waarvan `serialize(parse(x)) === x` geldt voor elke template die de parser
-accepteert. Zie `tests/roundtrip.test.ts` voor de corpus die deze property
-afdwingt. Voeg producti-templates toe en CI dwingt af dat geen wijziging die
-identiteit breekt.
+accepteert. De corpus in `tests/roundtrip.test.ts` bevat onder andere de
+**hele productie-Aidsfonds-template**, byte-identical — wijzigingen aan parser
+of serializer die deze identiteit breken falen direct in CI.
+
+## Pace template-syntax (samenvatting)
+
+| Construct | Voorbeeld | Toelichting |
+| --- | --- | --- |
+| Field ref | `{471: id}`, `{34-445: Person: Sex}` | Inhoud verbatim opgeslagen |
+| Var ref | `{var:count}` | Shorthand voor `$var[count]` |
+| Function call | `$func[arg1][arg2][arg3]` | Argumenten zijn aparte bracket-paren, géén comma-list |
+| Komma | `$substr[X][0, 4]` | Literal text binnen een arg (substr splitst zelf) |
+| Conditie-expressie | `{x} == 205 || {y} > 100 && 'a' == 'b'` | `==`, `!=`, `>`, `<`, `>=`, `<=`, `&&`, `\|\|`, single-quoted strings |
+| Datumformaat | `$date[{476}][%Y%m%d]` | strftime-stijl met `%`-prefix |
+| HTML tab | `&#9;` | Pace gebruikt deze entity als kolom-separator |
 
 ## Beveiliging
 

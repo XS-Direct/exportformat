@@ -1,22 +1,31 @@
 import { describe, it, expect } from 'vitest'
 import { parse } from '../src/shared/parser'
 import { serialize } from '../src/shared/serializer'
+import { AIDSFONDS_REPEATING_CODE } from '../src/shared/fixtures/aidsfonds'
 
 const corpus: string[] = [
   '',
   'plain text',
   '{471: id}',
-  'id={471: id}\t{34-445: Person: Sex}\n',
+  'id={471: id}&#9;{34-445: Person: Sex}',
   '$count',
   '$tab[]',
-  '$if[{471: id}, yes, no]',
-  '$ifelse[$strtolower[{12-100: Person: Lastname}], present, ]',
-  // Real-world-ish templates with deep nesting and TAB-separated columns.
-  '$storevar[org, Alzheimer NL]{471: id}\t{34-445: Person: Sex}\t$var[org]\t$if[$ifelse[{99-7: Project}, $strlen[{99-7: Project}], 0], WV26063, {99-7: Project}]\t{50-1: Person: Firstname}\t{50-2: Person: Lastname}\n',
-  '$if[a,   b,\n  c]',
-  '$concat[a,b,,d]',
-  // Pathological but legal: whitespace-only args, trailing comma free use.
-  '$if[ , ,   ]',
+  '$if[{471: id} == 1][yes]',
+  '$ifelse[{471: id} == 1][yes][no]',
+  '$replace[,][.][{478: Amount}]',
+  '$var[count][{var:count} + 1]',
+  '$substr[{34-51-710: Person: Address: Postal code}][0, 4]',
+  '$date[{476: Date}][%d-%m-%Y]',
+  // Single-quoted condition operands; method-override branch from the
+  // real Aidsfonds template.
+  `$if['{803: Method override}' == 'door-to-door'][23580]`,
+  // Real-world combination — nested $ifelse over project ids and a
+  // method-override sub-branch.
+  `$ifelse[{22-326: Project: id} == 205 || {22-326: Project: id} == 206]` +
+    `[$if['{803: Method override}' == 'event'][22698]][]`,
+  // The whole Aidsfonds template — this is the canonical round-trip
+  // bar that protects the parser/serializer against regressions.
+  AIDSFONDS_REPEATING_CODE,
 ]
 
 describe('round-trip', () => {

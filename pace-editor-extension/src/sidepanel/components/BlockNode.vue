@@ -16,20 +16,20 @@ const props = defineProps<{
 }>()
 
 const FUNCTION_NAMES = [
-  '$if', '$ifelse', '$concat', '$var', '$storevar', '$date',
+  '$if', '$ifelse', '$concat', '$var', '$date',
   '$substr', '$replace', '$strtolower', '$strtoupper', '$trim',
   '$strlen', '$pad', '$count', '$linebreak', '$tab', '$semicolon',
 ] as const
 
+// Pace's real syntax uses bracket-pair arguments — each `[…]` is one arg.
 const ARG_HINTS: Record<string, string[]> = {
-  $if: ['condition', 'then', 'else'],
-  $ifelse: ['value', 'then', 'else'],
-  $date: ['format', 'sourceDate?'],
-  $substr: ['string', 'start', 'length?'],
+  $if: ['condition', 'then'],
+  $ifelse: ['condition', 'then', 'else'],
+  $date: ['source (empty = now)', 'format (eg. %d-%m-%Y)'],
+  $substr: ['input', 'start, length?'],
   $replace: ['search', 'replace', 'subject'],
-  $pad: ['string', 'length', 'padChar?', 'direction?'],
-  $storevar: ['name', 'value'],
-  $var: ['name'],
+  $pad: ['input', 'length', 'padChar?', 'direction?'],
+  $var: ['name', 'value (omit to read)'],
 }
 
 function updateText(value: string): void {
@@ -55,7 +55,7 @@ function updateFuncArg(argIndex: number, nextNodes: IRNode[]): void {
 
 function addArg(): void {
   if (props.node.kind !== 'func') return
-  const next: FuncArg = { prefix: ' ', nodes: [] }
+  const next: FuncArg = { nodes: [] }
   const args = props.node.args ? [...props.node.args, next] : [next]
   props.onReplace({ ...props.node, args })
 }

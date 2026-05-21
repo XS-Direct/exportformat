@@ -1,10 +1,14 @@
 // Intermediate representation for Pace template strings.
 //
-// A template is a sequence of IRNodes. Text nodes carry literal characters
-// (including whitespace, indentation, newlines) verbatim. Field nodes
-// reference Pace's field catalog. Func nodes are function calls with
-// per-arg whitespace tracking so that serialize(parse(x)) === x for any
-// template the parser accepts.
+// Pace's surface syntax is:
+//
+//   field    := '{' raw '}'                          // raw never contains '{' or '}'
+//   funcCall := '$' name ('[' template ']')+         // one or more bracket pairs
+//   text     := anything else
+//
+// Commas are literal text — function arguments are separated by adjacent
+// bracket pairs, not commas. The IR mirrors that shape exactly so
+// serialize(parse(x)) === x for every template the parser accepts.
 
 export type IRNode = TextNode | FieldNode | FuncNode
 
@@ -15,30 +19,28 @@ export interface TextNode {
 
 export interface FieldNode {
   kind: 'field'
-  // Raw content between the braces, eg. "34-445: Person: Sex" or "471: id".
-  // Stored verbatim to guarantee round-trip identity even for unusual labels.
+  // Raw content between the braces, eg. "34-445: Person: Sex", "471: id",
+  // or "var:count" for variable references. Stored verbatim.
   raw: string
 }
 
 export interface FuncArg {
-  // Whitespace between the preceding `,` (or `[`) and the first non-ws token.
-  // Captured so that `$if[a, b,  c]` round-trips with the right spacing.
-  prefix: string
+  // The template inside one bracket pair. Parsed recursively into IR nodes.
   nodes: IRNode[]
 }
 
 export interface FuncNode {
   kind: 'func'
-  // Function name including the leading `$`, eg. "$if", "$ifelse", "$count".
+  // Function name including the leading `$`, eg. "$if", "$ifelse", "$var".
   name: string
-  // null when the function was written without brackets (eg. `$count`).
+  // null means the function appeared without any brackets (eg. `$count` as
+  // a standalone token); an empty array would mean `$name` followed by no
+  // brackets either, which we encode the same way as null for clarity.
   args: FuncArg[] | null
 }
 
 export type IRTree = IRNode[]
 
-// A parser error carries a 1-based line and column so the side panel can
-// jump the user to the offending position in the textarea.
 export interface ParseError {
   message: string
   index: number

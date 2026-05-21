@@ -67,7 +67,11 @@ export function runSimulation(inputs: SimulationInputs): SimulationOutput {
     }
     const raw = evaluate(repeating, ctx)
     combinedRows += raw
-    const columns = raw.split('\t')
+    // Pace writes columns separated by the HTML tab entity (`&#9;`). The
+    // entity is decoded to a real TAB at file-write time downstream, but
+    // for column comparison we do the same decoding here.
+    const normalized = raw.replace(/&#9;/g, '\t')
+    const columns = normalized.split('\t')
     const expectedCols = scenario.expected?.columns ?? []
     const diff: ColumnDiff[] = columns.map((actual, i) => {
       const expected = expectedCols[i]
