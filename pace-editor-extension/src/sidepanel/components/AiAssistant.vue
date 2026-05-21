@@ -44,7 +44,18 @@ async function clearApiKey(): Promise<void> {
   apiKeyStored.value = false
 }
 
-// Is the current model an export? (title starts with "export")
+// Parse header names from Code Before
+const headerNames = computed(() => {
+  const raw = store.codeBefore
+  if (!raw) return []
+  const cleaned = raw.replace(/\$(?:var|storevar|rem)\[[^\]]*\](?:\[[^\]]*\])?/g, '').trim()
+  if (!cleaned) return []
+  if (cleaned.includes('&#9;') || cleaned.includes('\t')) return cleaned.split(/&#9;|\t/).map((s) => s.replace(/"/g, '').trim())
+  if (cleaned.includes(';')) return cleaned.split(';').map((s) => s.replace(/"/g, '').trim())
+  if (cleaned.includes(',')) return cleaned.split(',').map((s) => s.replace(/"/g, '').trim())
+  return [cleaned]
+})
+
 const isExportModel = computed(() =>
   (store.snapshot?.title ?? '').toLowerCase().startsWith('export'),
 )
@@ -311,6 +322,15 @@ function formatTime(ts: number): string {
           Preview met voorgestelde code ({{ previewRows.length }} rijen)
         </div>
         <table class="w-full border-collapse text-[11px]">
+          <thead v-if="headerNames.length > 0">
+            <tr class="bg-slate-100">
+              <th
+                v-for="(name, ci) in headerNames"
+                :key="'h'+ci"
+                class="whitespace-nowrap border border-slate-200 px-1.5 py-0.5 text-left font-semibold text-slate-700"
+              >{{ name }}</th>
+            </tr>
+          </thead>
           <tbody>
             <tr
               v-for="(row, ri) in previewRows.slice(0, 2)"
