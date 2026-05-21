@@ -1,13 +1,57 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useEditorStore } from '../store'
-import { evaluate, createContext } from '@shared/evaluator'
-import { parse } from '@shared/parser'
 import { buildAutoFixtures } from '@shared/auto-fixtures'
 import { runSimulation } from '@shared/simulator'
 
+import type { ExtensionMessage } from '@shared/messages'
+
 const store = useEditorStore()
 const showRaw = ref(false)
+const previewMode = ref<'sim' | 'live'>('sim')
+const liveOutput = ref('')
+const liveLoading = ref(false)
+const liveError = ref('')
+
+async function runLiveExport(): Promise<void> {
+  // Find the block ID from the models list or current snapshot
+  const models = store.models
+  const title = store.snapshot?.title
+  const model = title ? models.find((m) => m.title === title) : null
+  if (!model) {
+    liveError.value = 'Kan het model niet vinden. Gebruik "Lezen" om het model eerst te laden.'
+    return
+  }
+  liveLoading.value = true
+  liveError.value = ''
+  liveOutput.value = ''
+  try {
+    const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
+      type: 'PACE_RUN_LIVE_EXPORT',
+      blockId: model.id,
+    })
+    if (reply?.ok) {
+      liveOutput.value = reply.output
+      previewMode.value = 'live'
+    } else {
+      liveError.value = reply?.error ?? 'Export mislukt'
+    }
+  } catch (err) {
+    liveError.value = (err as Error).message
+  } finally {
+    liveLoading.value = false
+  }
+}
+
+// Parse live output into table rows
+const liveRows = computed(() => {
+  if (!liveOutput.value) return []
+  const text = liveOutput.value.replace(/&#9;/g, '\t')
+  const lines = text.split('\n').filter((l) => l.trim())
+  if (lines.length === 0) return []
+  const delim = detectDelimiter(lines[0])
+  return lines.map((line) => splitCsvRow(line, delim))
+})
 
 const autoFixture = computed(() => {
   if (!store.repeatingCode) return null
@@ -29,12 +73,24 @@ const result = computed(() => {
   })
 })
 
-// Evaluate Code Before separately to get the header line
-const headerOutput = computed(() => {
-  if (!store.codeBefore) return ''
-  const tree = parse(store.codeBefore).tree
-  const ctx = createContext(new Map(), 0)
-  return evaluate(tree, ctx).replace(/&#9;/g, '\t').trim()
+// Parse Code Before as the header row — split by whatever delimiter it uses
+const columnHeaders = computed(() => {
+  const raw = store.codeBefore
+  if (!raw) return []
+  // Strip Pace functions that produce no output
+  const cleaned = raw.replace(/\$(?:var|storevar|rem)\[[^\]]*\](?:\[[^\]]*\])?/g, '').trim()
+  if (!cleaned) return []
+  // Detect delimiter
+  if (cleaned.includes('&#9;') || cleaned.includes('\t')) {
+    return cleaned.split(/&#9;|\t/).map((s) => s.replace(/"/g, '').trim())
+  }
+  if (cleaned.includes(';')) {
+    return cleaned.split(';').map((s) => s.replace(/"/g, '').trim())
+  }
+  if (cleaned.includes(',')) {
+    return cleaned.split(',').map((s) => s.replace(/"/g, '').trim())
+  }
+  return [cleaned]
 })
 
 // Split a CSV/TSV row respecting quoted values: "val1";"val2" → [val1, val2]
@@ -79,11 +135,6 @@ function detectDelimiter(text: string): string {
 }
 
 // Parse the header line into column names using its own delimiter
-const headerNames = computed(() => {
-  if (!headerOutput.value) return []
-  const delim = detectDelimiter(headerOutput.value)
-  return headerOutput.value.split(delim).map((s) => s.replace(/"/g, '').trim())
-})
 
 // Data rows: split each row's raw output by the actual delimiter used.
 // The simulator splits on &#9;/tab, but some models use ; or , instead.
@@ -107,27 +158,12 @@ const dataRows = computed(() => {
   })
 })
 
-// Determine the max column count (header vs data)
-const maxCols = computed(() => {
-  const headerCols = headerNames.value.length
-  const dataCols = dataRows.value[0]?.length ?? 0
-  return Math.max(headerCols, dataCols)
-})
+const maxCols = computed(() => dataRows.value[0]?.length ?? 0)
 
 // Build the raw file output for the "Raw" view
 const fileOutput = computed(() => {
   if (!result.value) return ''
-  const header = headerOutput.value
-  const rows = result.value.rows.map((r) => r.raw.replace(/&#9;/g, '\t'))
-  const afterTree = parse(store.codeAfter).tree
-  const afterCtx = createContext(new Map(), 0)
-  const footer = evaluate(afterTree, afterCtx).replace(/&#9;/g, '\t').trim()
-  return [header, ...rows, footer].filter(Boolean).join('\n')
-})
-
-const delimiterLabel = computed(() => {
-  const hd = headerOutput.value ? detectDelimiter(headerOutput.value) : ''
-  return hd === '\t' ? 'tab' : hd || '?'
+  return result.value.combined.replace(/&#9;/g, '\t')
 })
 
 const originalDiff = computed(() => {
@@ -142,31 +178,49 @@ const originalDiff = computed(() => {
     <div>
       <div class="mb-2 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-slate-700">Export preview</h2>
-        <button
-          class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100"
-          @click="showRaw = !showRaw"
-        >{{ showRaw ? 'Tabel' : 'Raw' }}</button>
+        <div class="flex gap-1">
+          <button
+            class="rounded border px-2 py-0.5 text-[11px] font-medium"
+            :class="previewMode === 'sim' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600 hover:bg-slate-100'"
+            @click="previewMode = 'sim'"
+          >Simulatie</button>
+          <button
+            class="rounded border px-2 py-0.5 text-[11px] font-medium"
+            :class="previewMode === 'live' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-600 hover:bg-slate-100'"
+            :disabled="liveLoading"
+            @click="runLiveExport"
+          >{{ liveLoading ? 'Laden...' : 'Live export' }}</button>
+          <button
+            class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100"
+            @click="showRaw = !showRaw"
+          >{{ showRaw ? 'Tabel' : 'Raw' }}</button>
+        </div>
       </div>
       <p class="mb-2 text-[11px] text-slate-500">
         Zo ziet het exportbestand eruit (met testdata).
-        <span v-if="headerNames.length > 0 && dataRows.length > 0 && headerNames.length !== dataRows[0].length" class="text-amber-600">
-          Header: {{ headerNames.length }} kol. ({{ delimiterLabel }}) | Data: {{ dataRows[0]?.length }} kol. (tab)
-        </span>
       </p>
+      <div
+        v-if="columnHeaders.length > 0 && dataRows.length > 0 && columnHeaders.length !== dataRows[0].length"
+        class="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900"
+      >
+        <strong>Let op:</strong> Code Before header heeft {{ columnHeaders.length }} kolommen (;-gescheiden)
+        maar de data heeft {{ dataRows[0].length }} kolommen (tab-gescheiden).
+        Kolomnamen kunnen verschoven zijn. Controleer het template.
+      </div>
 
-      <!-- Raw file output -->
-      <pre v-if="showRaw" class="mono max-h-96 overflow-auto rounded border border-slate-200 bg-slate-900 p-2 text-xs text-slate-100 whitespace-pre-wrap break-all">{{ fileOutput || '(leeg)' }}</pre>
+      <pre v-if="showRaw && previewMode === 'sim'" class="mono max-h-96 overflow-auto rounded border border-slate-200 bg-slate-900 p-2 text-xs text-slate-100 whitespace-pre-wrap break-all">{{ fileOutput || '(leeg)' }}</pre>
 
-      <!-- Table view -->
-      <div v-else-if="dataRows.length > 0 || headerNames.length > 0" class="overflow-x-auto rounded border border-slate-200">
+      <pre v-else-if="showRaw && previewMode === 'live' && liveOutput" class="mono max-h-96 overflow-auto rounded border border-slate-200 bg-slate-900 p-2 text-xs text-slate-100 whitespace-pre-wrap break-all">{{ liveOutput }}</pre>
+
+      <div v-else-if="previewMode === 'sim' && dataRows.length > 0" class="overflow-x-auto rounded border border-slate-200">
         <table class="w-full border-collapse text-[11px]">
-          <thead v-if="headerNames.length > 0">
+          <thead>
             <tr class="bg-slate-100">
               <th
                 v-for="ci in maxCols"
                 :key="'h'+ci"
                 class="whitespace-nowrap border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700"
-              >{{ headerNames[ci - 1] || ci }}</th>
+              >{{ columnHeaders[ci - 1] || ci }}</th>
             </tr>
           </thead>
           <tbody>
@@ -187,7 +241,45 @@ const originalDiff = computed(() => {
         </table>
       </div>
 
-      <p v-else class="text-xs text-slate-500 italic">Geen template geladen.</p>
+      <!-- Live export output -->
+      <p v-else-if="previewMode === 'live' && liveError" class="text-xs text-rose-700">{{ liveError }}</p>
+
+      <div v-else-if="previewMode === 'live' && liveRows.length > 0" class="overflow-x-auto rounded border border-emerald-200">
+        <div class="bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800">
+          Live data van Pace ({{ liveRows.length }} rijen)
+        </div>
+        <table class="w-full border-collapse text-[11px]">
+          <thead>
+            <tr class="bg-slate-100">
+              <th
+                v-for="(_, ci) in liveRows[0]"
+                :key="'lh'+ci"
+                class="whitespace-nowrap border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700"
+              >{{ liveRows[0][ci] || (ci + 1) }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(row, ri) in liveRows.slice(1)"
+              :key="'lr'+ri"
+              class="hover:bg-blue-50"
+              :class="ri % 2 === 1 ? 'bg-slate-50' : 'bg-white'"
+            >
+              <td
+                v-for="(cell, ci) in row"
+                :key="ci"
+                class="whitespace-nowrap border border-slate-200 px-2 py-1 text-slate-800"
+              >{{ cell || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p v-else-if="previewMode === 'live' && !liveLoading" class="text-xs text-slate-500 italic">
+        Klik "Live export" om echte data op te halen.
+      </p>
+
+      <p v-else-if="previewMode === 'sim' && dataRows.length === 0" class="text-xs text-slate-500 italic">Geen template geladen.</p>
     </div>
 
     <!-- Diff with original -->

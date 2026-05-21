@@ -6,6 +6,26 @@ import { saveCatalog } from '@shared/field-catalog'
 const store = useEditorStore()
 const filter = ref('')
 
+const currentVersion = chrome.runtime.getManifest().version
+const updateStatus = ref<'idle' | 'checking' | 'available' | 'up-to-date'>('idle')
+const remoteVersion = ref('')
+
+async function checkForUpdates(): Promise<void> {
+  updateStatus.value = 'checking'
+  try {
+    const resp = await fetch(
+      'https://raw.githubusercontent.com/XS-Direct/exportformat/main/pace-editor-extension/package.json',
+      { cache: 'no-store' },
+    )
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const pkg = await resp.json()
+    remoteVersion.value = pkg.version
+    updateStatus.value = pkg.version !== currentVersion ? 'available' : 'up-to-date'
+  } catch {
+    updateStatus.value = 'idle'
+  }
+}
+
 const filtered = computed(() => {
   const q = filter.value.trim().toLowerCase()
   if (!q) return store.catalog
@@ -85,6 +105,23 @@ function exportJson(): void {
         >verwijderen</button>
       </li>
     </ul>
+
+    <section class="rounded border border-slate-200 bg-white p-2">
+      <div class="flex items-center gap-2">
+        <h3 class="text-xs font-semibold text-slate-700">Versie {{ currentVersion }}</h3>
+        <button
+          class="rounded border border-slate-300 px-2 py-0.5 text-[11px] hover:bg-slate-100 disabled:opacity-50"
+          :disabled="updateStatus === 'checking'"
+          @click="checkForUpdates"
+        >{{ updateStatus === 'checking' ? 'Checken...' : 'Check updates' }}</button>
+      </div>
+      <p v-if="updateStatus === 'up-to-date'" class="mt-1 text-[11px] text-emerald-700">Je hebt de nieuwste versie.</p>
+      <div v-if="updateStatus === 'available'" class="mt-1 rounded bg-amber-50 p-1.5 text-[11px] text-amber-900">
+        <strong>v{{ remoteVersion }}</strong> beschikbaar!
+        <code class="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px]">git pull && npm run build</code>
+        + reload extension
+      </div>
+    </section>
 
     <section>
       <h3 class="text-xs font-semibold text-slate-700">Host</h3>

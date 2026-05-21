@@ -233,3 +233,41 @@ export function readPaceState(): PaceDomReadResult {
     fields: scrapeFieldRefs(),
   }
 }
+
+// Read a specific model by its block ID (from the hidden block textareas)
+export function readPaceStateById(blockId: string): PaceDomReadResult {
+  console.log('[pace-editor] readPaceStateById:', blockId)
+  const titleInput = document.querySelector<HTMLInputElement>(`input.block-title[name="ttl-${blockId}"]`)
+  const title = titleInput?.value ?? ''
+  const codeBefore = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc_before-${blockId}"]`)
+  const repeating = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc-${blockId}"]`)
+  const codeAfter = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc_after-${blockId}"]`)
+  const outputInput = document.querySelector<HTMLInputElement>(`input.block-output[name="output-${blockId}"]`)
+
+  if (!repeating) {
+    return {
+      ok: false,
+      reason: `Block ${blockId} not found on this page.`,
+      title,
+      outputFormat: 'unknown',
+      codeBefore: '',
+      repeatingCode: '',
+      codeAfter: '',
+      fields: [],
+    }
+  }
+
+  const outputVal = (outputInput?.value ?? '').toLowerCase()
+  const outputFormat: 'json' | 'custom' | 'unknown' =
+    outputVal.includes('json') ? 'json' : outputVal.includes('custom') ? 'custom' : 'unknown'
+
+  return {
+    ok: true,
+    title,
+    outputFormat,
+    codeBefore: codeBefore?.value ?? '',
+    repeatingCode: repeating.value,
+    codeAfter: codeAfter?.value ?? '',
+    fields: [],
+  }
+}

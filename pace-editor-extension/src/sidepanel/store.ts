@@ -3,11 +3,11 @@ import { ref, computed, watch } from 'vue'
 import { parse } from '@shared/parser'
 import { serialize } from '@shared/serializer'
 import type { IRTree } from '@shared/ir-types'
-import type { ExtensionMessage, PaceModelSnapshot } from '@shared/messages'
+import type { ExtensionMessage, PaceModelSnapshot, PaceModelInfo } from '@shared/messages'
 import { mergeRaws, type CatalogEntry } from '@shared/field-catalog'
 import { extractAllFieldRefs } from '@shared/auto-fixtures'
 
-export type Tab = 'editor' | 'preview' | 'simulator' | 'settings'
+export type Tab = 'editor' | 'preview' | 'simulator' | 'ai' | 'settings'
 
 interface HistoryFrame {
   codeBefore: string
@@ -206,6 +206,51 @@ export const useEditorStore = defineStore('editor', () => {
     codeAfter.value = snapshot.value.codeAfter
   }
 
+  // --- Model listing & client grouping ---
+  const models = ref<PaceModelInfo[]>([])
+
+  async function loadModels(): Promise<void> {
+    try {
+      const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
+        type: 'PACE_LIST_MODELS',
+      })
+      if (reply?.ok && reply.models) {
+        models.value = reply.models
+      }
+    } catch { /* silent */ }
+  }
+
+  async function loadSnapshotById(blockId: string): Promise<void> {
+    loadError.value = null
+    try {
+      const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
+        type: 'PACE_REQUEST_SNAPSHOT_BY_ID',
+        blockId,
+      })
+      if (!reply || reply.ok !== true) {
+        loadError.value = reply?.error ?? 'No response'
+        return
+      }
+      const snap = reply.snapshot as PaceModelSnapshot
+      snapshot.value = snap
+      suppressHistory = true
+      codeBefore.value = snap.codeBefore
+      repeatingCode.value = snap.repeatingCode
+      codeAfter.value = snap.codeAfter
+      queueMicrotask(() => {
+        suppressHistory = false
+        resetHistory()
+      })
+      const templateFields = extractAllFieldRefs(snap.codeBefore, snap.repeatingCode, snap.codeAfter)
+      const allFields = [...new Set([...snap.fields, ...templateFields])]
+      if (allFields.length) {
+        catalog.value = await mergeRaws(allFields)
+      }
+    } catch (err) {
+      loadError.value = (err as Error).message
+    }
+  }
+
   return {
     tab,
     snapshot,
@@ -221,7 +266,10 @@ export const useEditorStore = defineStore('editor', () => {
     dirty,
     canUndo,
     canRedo,
+    models,
     loadSnapshot,
+    loadModels,
+    loadSnapshotById,
     sendRepeatingCode,
     revertChanges,
     undo,

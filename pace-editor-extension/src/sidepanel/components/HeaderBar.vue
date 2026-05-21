@@ -5,18 +5,20 @@ import { useEditorStore } from '../store'
 const store = useEditorStore()
 
 const updateInfo = ref<{ current: string; remote: string } | null>(null)
-
 onMounted(async () => {
   try {
     const data = await chrome.storage.local.get('pace.update')
     if (data['pace.update']?.remote) updateInfo.value = data['pace.update']
   } catch { /* ignore */ }
+  // Pre-load model list
+  void store.loadModels()
 })
 
 const tabs: { id: typeof store.tab; label: string }[] = [
   { id: 'editor', label: 'Editor' },
   { id: 'preview', label: 'Preview' },
   { id: 'simulator', label: 'Simulator' },
+  { id: 'ai', label: 'AI' },
   { id: 'settings', label: 'Instellingen' },
 ]
 
@@ -42,6 +44,8 @@ function onKey(ev: KeyboardEvent): void {
   }
 }
 
+const emit = defineEmits<{ back: [] }>()
+
 onMounted(() => window.addEventListener('keydown', onKey))
 onUnmounted(() => window.removeEventListener('keydown', onKey))
 </script>
@@ -49,11 +53,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 <template>
   <header class="border-b border-slate-200 bg-white">
     <div class="flex items-center gap-2 px-3 py-2">
-      <div class="text-sm font-semibold text-slate-800">
-        Pace Editor
-      </div>
-      <div class="ml-2 truncate text-xs text-slate-500">
-        {{ store.snapshot?.title || '— geen model geladen —' }}
+      <button
+        class="rounded px-1.5 py-0.5 text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-800"
+        title="Terug naar klant-overzicht"
+        @click="emit('back')"
+      >&larr;</button>
+      <div class="truncate text-sm font-semibold text-slate-800">
+        {{ store.snapshot?.title || 'Pace Editor' }}
       </div>
       <div class="ml-auto flex items-center gap-1">
         <button

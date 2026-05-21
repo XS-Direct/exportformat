@@ -16,13 +16,23 @@ export interface PaceModelSnapshot {
   host: string
 }
 
+export interface PaceModelInfo {
+  id: string
+  title: string
+  type: 'download' | 'export' | 'other'
+  client: string // extracted client name (e.g. "Aidsfonds")
+}
+
 export type ExtensionMessage =
   | { type: 'PACE_OPEN_EDITOR' }
   | { type: 'PACE_REQUEST_SNAPSHOT' }
+  | { type: 'PACE_REQUEST_SNAPSHOT_BY_ID'; blockId: string }
+  | { type: 'PACE_LIST_MODELS' }
   | { type: 'PACE_SNAPSHOT'; snapshot: PaceModelSnapshot }
   | { type: 'PACE_WRITE_REPEATING_CODE'; value: string }
   | { type: 'PACE_WRITE_RESULT'; ok: boolean; error?: string }
   | { type: 'PACE_CONTEXT_LOST' }
+  | { type: 'PACE_RUN_LIVE_EXPORT'; blockId: string }
 
 export type ExtensionResponse =
   | { ok: true }
