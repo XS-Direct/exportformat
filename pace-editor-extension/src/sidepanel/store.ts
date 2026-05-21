@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { parse } from '@shared/parser'
 import { serialize } from '@shared/serializer'
 import type { IRTree } from '@shared/ir-types'
@@ -7,6 +7,17 @@ import type { ExtensionMessage, PaceModelSnapshot } from '@shared/messages'
 import { mergeRaws, type CatalogEntry } from '@shared/field-catalog'
 
 export type Tab = 'editor' | 'preview' | 'simulator' | 'settings'
+
+interface HistoryFrame {
+  codeBefore: string
+  repeatingCode: string
+  codeAfter: string
+}
+
+const HISTORY_LIMIT = 100
+// Don't push a new history frame for every keystroke; coalesce edits that
+// happen within this window into the most recent frame.
+const HISTORY_DEBOUNCE_MS = 400
 
 export const useEditorStore = defineStore('editor', () => {
   const tab = ref<Tab>('editor')
@@ -21,6 +32,96 @@ export const useEditorStore = defineStore('editor', () => {
   const codeBefore = ref('')
   const repeatingCode = ref('')
   const codeAfter = ref('')
+
+  // Undo/redo: a list of frames plus a cursor. New edits truncate the
+  // redo tail. A flag suppresses the watcher while we're applying an undo
+  // so it doesn't push the very change it's restoring.
+  const history = ref<HistoryFrame[]>([])
+  const historyCursor = ref(-1)
+  let suppressHistory = false
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null
+
+  function currentFrame(): HistoryFrame {
+    return {
+      codeBefore: codeBefore.value,
+      repeatingCode: repeatingCode.value,
+      codeAfter: codeAfter.value,
+    }
+  }
+
+  function pushFrame(frame: HistoryFrame): void {
+    // Drop redo tail.
+    if (historyCursor.value < history.value.length - 1) {
+      history.value = history.value.slice(0, historyCursor.value + 1)
+    }
+    const prev = history.value[historyCursor.value]
+    if (
+      prev &&
+      prev.codeBefore === frame.codeBefore &&
+      prev.repeatingCode === frame.repeatingCode &&
+      prev.codeAfter === frame.codeAfter
+    ) {
+      return
+    }
+    history.value.push(frame)
+    if (history.value.length > HISTORY_LIMIT) {
+      history.value.shift()
+    }
+    historyCursor.value = history.value.length - 1
+  }
+
+  function resetHistory(): void {
+    if (pendingTimer) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
+    history.value = [currentFrame()]
+    historyCursor.value = 0
+  }
+
+  watch([codeBefore, repeatingCode, codeAfter], () => {
+    if (suppressHistory) return
+    if (pendingTimer) clearTimeout(pendingTimer)
+    pendingTimer = setTimeout(() => {
+      pushFrame(currentFrame())
+      pendingTimer = null
+    }, HISTORY_DEBOUNCE_MS)
+  })
+
+  function applyFrame(frame: HistoryFrame): void {
+    suppressHistory = true
+    codeBefore.value = frame.codeBefore
+    repeatingCode.value = frame.repeatingCode
+    codeAfter.value = frame.codeAfter
+    // Flip back synchronously after the watcher has had a chance to
+    // observe the values — a microtask works because watch() schedules
+    // the callback on the next flush.
+    queueMicrotask(() => {
+      suppressHistory = false
+    })
+  }
+
+  const canUndo = computed(() => historyCursor.value > 0)
+  const canRedo = computed(() => historyCursor.value < history.value.length - 1)
+
+  function undo(): void {
+    if (!canUndo.value) return
+    // Flush any pending edit into history first so undo doesn't appear
+    // to skip the most recent change.
+    if (pendingTimer) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+      pushFrame(currentFrame())
+    }
+    historyCursor.value--
+    applyFrame(history.value[historyCursor.value])
+  }
+
+  function redo(): void {
+    if (!canRedo.value) return
+    historyCursor.value++
+    applyFrame(history.value[historyCursor.value])
+  }
 
   const parsed = computed<{ tree: IRTree; hasErrors: boolean; errors: string[] }>(() => {
     const result = parse(repeatingCode.value)
@@ -52,9 +153,14 @@ export const useEditorStore = defineStore('editor', () => {
       }
       const snap = reply.snapshot as PaceModelSnapshot
       snapshot.value = snap
+      suppressHistory = true
       codeBefore.value = snap.codeBefore
       repeatingCode.value = snap.repeatingCode
       codeAfter.value = snap.codeAfter
+      queueMicrotask(() => {
+        suppressHistory = false
+        resetHistory()
+      })
       if (snap.fields.length) {
         catalog.value = await mergeRaws(snap.fields)
       }
@@ -103,8 +209,12 @@ export const useEditorStore = defineStore('editor', () => {
     parsed,
     roundTripOk,
     dirty,
+    canUndo,
+    canRedo,
     loadSnapshot,
     sendRepeatingCode,
     revertChanges,
+    undo,
+    redo,
   }
 })

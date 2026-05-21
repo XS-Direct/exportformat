@@ -11,6 +11,8 @@ const props = defineProps<{
   onInsertAfter: (next: IRNode) => void
   onMoveUp: () => void
   onMoveDown: () => void
+  onDragStart: (ev: DragEvent) => void
+  onDragEnd: () => void
 }>()
 
 const FUNCTION_NAMES = [
@@ -78,6 +80,13 @@ function toggleBrackets(): void {
 <template>
   <div class="rounded border border-slate-200 bg-slate-50/50">
     <header class="flex items-center gap-2 border-b border-slate-200 bg-white px-2 py-1">
+      <span
+        draggable="true"
+        class="cursor-grab select-none rounded px-1 text-slate-400 hover:bg-slate-100 active:cursor-grabbing"
+        title="Versleep om te verplaatsen"
+        @dragstart.stop="(ev: DragEvent) => onDragStart(ev)"
+        @dragend.stop="onDragEnd"
+      >⋮⋮</span>
       <span
         class="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
         :class="{

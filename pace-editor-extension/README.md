@@ -84,10 +84,38 @@ De testsuite in `tests/` dekt:
 Vervang de placeholder-fixtures in `src/shared/fixtures/` door de echte
 Aidsfonds- en Alzheimer NL-templates zodra je die uit Pace exporteert.
 
+## Sneltoetsen
+
+| Toets | Actie |
+| --- | --- |
+| `Ctrl/Cmd + Z` | Ongedaan maken (model-niveau) |
+| `Ctrl/Cmd + Shift + Z` of `Ctrl/Cmd + Y` | Opnieuw |
+
+Wanneer focus binnen een input/textarea staat, blijven de native browser-undo
+shortcuts werken op het tekst-niveau van dat veld.
+
+## Multi-host
+
+Voor opt-in hosts (bv. staging) levert het manifest `optional_host_permissions`
+op `https://*.xsdirect.nl/*`. Voeg op de options-pagina een host toe; de
+extensie vraagt expliciet permissie, registreert dynamisch het content script
+voor dat patroon en luistert vanaf dat moment ook daar. Permissie kan via
+dezelfde pagina worden ingetrokken.
+
+## Drag-drop
+
+Iedere blok-header bevat een `⋮⋮`-handle. Versleep om binnen dezelfde
+sibling-lijst te herordenen. Cross-array verplaatsen (bv. een node uit
+`$if`'s then-tak naar de else-tak) gaat met de ↑/↓-knoppen — dat is bewust
+zo gehouden om subtiele DnD-bugs te vermijden.
+
 ## Roadmap
 
 - Phase 0 – shared package + tests **(klaar)**
 - Phase 1 – content script + read-only side panel **(klaar)**
 - Phase 2 – visuele node-editor met add/remove/edit **(klaar)**
 - Phase 3 – simulator + CSV/TSV-download **(klaar)**
-- Phase 4 – UX-polish: drag-drop, undo/redo, multi-host config (open)
+- Phase 4 – UX-polish: drag-drop, undo/redo, multi-host config **(klaar)**
+- Open: echte Aidsfonds/Alzheimer NL-templates importeren in fixtures,
+  Pace-DOM-selectors empirisch valideren tegen de live UI, design-iconen
+  vervangen.

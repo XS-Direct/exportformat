@@ -1,9 +1,55 @@
 import type { ExtensionMessage } from '../shared/messages'
+import { loadConfiguredHosts, BUILTIN_HOSTS } from '../shared/hosts'
+
+const DYNAMIC_SCRIPT_ID = 'pace-editor-dynamic'
 
 // Allow the toolbar icon to toggle the side panel on Pace tabs.
 chrome.sidePanel
   ?.setPanelBehavior({ openPanelOnActionClick: true })
   .catch((err) => console.warn('[pace-editor] setPanelBehavior failed', err))
+
+// On startup, register a content script for every opt-in host the user has
+// actually granted permission for. Hosts that lost permission are silently
+// dropped (the user may have revoked them in chrome://extensions).
+async function syncDynamicContentScripts(): Promise<void> {
+  const configured = await loadConfiguredHosts()
+  const extras = configured.filter((h) => !h.builtin).map((h) => h.pattern)
+  const builtinPatterns = BUILTIN_HOSTS.map((h) => h.pattern)
+  const granted = await chrome.permissions.getAll()
+  const grantedOrigins = new Set(granted.origins ?? [])
+  // Built-in hosts are covered by manifest content_scripts; only register
+  // dynamic scripts for the extras that have permission and are not
+  // accidentally re-declaring a built-in pattern.
+  const dynamicMatches = extras.filter(
+    (p) => grantedOrigins.has(p) && !builtinPatterns.includes(p),
+  )
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({
+      ids: [DYNAMIC_SCRIPT_ID],
+    })
+    if (existing.length > 0) {
+      await chrome.scripting.unregisterContentScripts({ ids: [DYNAMIC_SCRIPT_ID] })
+    }
+    if (dynamicMatches.length === 0) return
+    await chrome.scripting.registerContentScripts([
+      {
+        id: DYNAMIC_SCRIPT_ID,
+        // Re-use the same compiled content script the manifest points at;
+        // crxjs copies it to a stable path in the bundle output.
+        js: ['src/content/index.ts'],
+        matches: dynamicMatches,
+        runAt: 'document_idle',
+      },
+    ])
+  } catch (err) {
+    console.warn('[pace-editor] failed to sync dynamic content scripts', err)
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => void syncDynamicContentScripts())
+chrome.runtime.onStartup.addListener(() => void syncDynamicContentScripts())
+chrome.permissions?.onAdded?.addListener(() => void syncDynamicContentScripts())
+chrome.permissions?.onRemoved?.addListener(() => void syncDynamicContentScripts())
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender) => {
   if (message.type === 'PACE_OPEN_EDITOR') {
@@ -26,7 +72,6 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
   if (message.type !== 'PACE_REQUEST_SNAPSHOT' && message.type !== 'PACE_WRITE_REPEATING_CODE') {
     return false
   }
-  // If the message came from the content script, it already knows the tab.
   if (sender.tab) return false
   void (async () => {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })

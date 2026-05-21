@@ -24,6 +24,10 @@ async function clearCatalog(): Promise<void> {
   await saveCatalog([])
 }
 
+function openOptionsPage(): void {
+  chrome.runtime.openOptionsPage()
+}
+
 function exportJson(): void {
   const blob = new Blob([JSON.stringify(store.catalog, null, 2)], {
     type: 'application/json',
@@ -85,10 +89,13 @@ function exportJson(): void {
     <section>
       <h3 class="text-xs font-semibold text-slate-700">Host</h3>
       <p class="text-xs text-slate-600">
-        Extensie luistert op:
+        Extensie luistert standaard op
         <code class="mono rounded bg-slate-100 px-1">pace-bp.xsdirect.nl</code>.
-        Andere hosts ondersteunen vergt een nieuwe extensie-release met
-        bijgewerkte <code>host_permissions</code> in <code>manifest.config.ts</code>.
+        Extra hosts (bv. staging) voeg je toe via de
+        <button
+          class="text-blue-700 underline-offset-2 hover:underline"
+          @click="openOptionsPage"
+        >options-pagina</button>.
       </p>
     </section>
   </section>
