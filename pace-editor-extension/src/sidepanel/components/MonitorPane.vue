@@ -83,6 +83,21 @@ async function loadModelData(model: PaceModelInfo): Promise<ModelCheck> {
 
   if (!snap.repeatingCode || snap.repeatingCode.trim() === '') {
     issues.push({ severity: 'warning', message: 'Repeating code is leeg' })
+  } else {
+    // Check newline at end (before any <<...>> directives)
+    const codeWithoutDirectives = (snap.repeatingCode || '').replace(/\n<<[^>]+>>\s*$/g, '')
+    if (!codeWithoutDirectives.endsWith('\n')) {
+      issues.push({ severity: 'warning', message: 'Repeating code eindigt niet met een newline' })
+    }
+
+    // Check exportedId based on model type
+    const hasExportedId = /<<exportedId=[^>]+>>/.test(snap.repeatingCode)
+    if (model.type === 'export' && !hasExportedId) {
+      issues.push({ severity: 'error', message: 'Mist <<exportedId={471: id}>> (verplicht voor Export)' })
+    }
+    if (model.type === 'download' && hasExportedId) {
+      issues.push({ severity: 'warning', message: 'Bevat <<exportedId=...>> (hoort niet in Download)' })
+    }
   }
 
   if (!snap.codeBefore || snap.codeBefore.trim() === '') {
@@ -101,56 +116,82 @@ async function loadModelData(model: PaceModelInfo): Promise<ModelCheck> {
   }
 }
 
+// The export's repeating code should be identical to the download's,
+// except the export has <<exportedId={471: id}>> appended after a newline.
+// Both must end with a newline before any <<...>> directives.
+const EXPORTED_ID_RE = /\n<<exportedId=[^>]+>>\s*$/
+const ANY_DIRECTIVE_RE = /\n<<[^>]+>>\s*/g
+
+function stripExportDirectives(code: string): string {
+  return code.replace(ANY_DIRECTIVE_RE, '\n').trimEnd()
+}
+
 function compareModels(download: ModelCheck, export_: ModelCheck): Issue[] {
   const diffs: Issue[] = []
 
-  // Compare column counts
-  if (download.dataColCount !== export_.dataColCount) {
+  // Check: export must have <<exportedId=...>>
+  if (!EXPORTED_ID_RE.test(export_.repeatingCode)) {
+    diffs.push({
+      severity: 'error',
+      message: 'Export mist <<exportedId={471: id}>> aan het einde',
+    })
+  }
+
+  // Check: download should NOT have <<exportedId=...>>
+  if (EXPORTED_ID_RE.test(download.repeatingCode)) {
     diffs.push({
       severity: 'warning',
-      message: `Kolom-aantal verschilt: Download ${download.dataColCount}, Export ${export_.dataColCount}`,
+      message: 'Download bevat <<exportedId=...>> — hoort alleen in Export',
     })
   }
 
-  // Compare headers
-  if (download.codeBefore !== export_.codeBefore) {
-    diffs.push({
-      severity: 'info',
-      message: 'Code Before (header) verschilt',
-    })
-  }
+  // Check: repeating code must end with newline (before <<...>>)
+  const dlClean = stripExportDirectives(download.repeatingCode)
+  const exClean = stripExportDirectives(export_.repeatingCode)
 
-  // Compare repeating code length (big difference = suspicious)
-  const lenDiff = Math.abs(download.repeatingCode.length - export_.repeatingCode.length)
-  const avgLen = (download.repeatingCode.length + export_.repeatingCode.length) / 2
-  if (avgLen > 0 && lenDiff / avgLen > 0.1) {
+  if (!download.repeatingCode.endsWith('\n') && !EXPORTED_ID_RE.test(download.repeatingCode)) {
     diffs.push({
       severity: 'warning',
-      message: `Repeating code verschilt significant (${download.repeatingCode.length} vs ${export_.repeatingCode.length} tekens)`,
-    })
-  } else if (download.repeatingCode !== export_.repeatingCode) {
-    diffs.push({
-      severity: 'info',
-      message: 'Repeating code verschilt (kleine wijzigingen)',
+      message: 'Download repeating code eindigt niet met een newline',
     })
   }
 
-  // Check Code After differences
-  if (download.codeAfter !== export_.codeAfter) {
+  // Compare: stripped versions should be identical
+  if (dlClean === exClean) {
     diffs.push({
       severity: 'info',
-      message: 'Code After verschilt',
+      message: 'Download en Export zijn gelijk (excl. <<exportedId>>)',
     })
-  }
+  } else {
+    // Find where they differ
+    diffs.push({
+      severity: 'error',
+      message: 'Download en Export repeating code verschilt (los van <<exportedId>>)',
+    })
 
-  // If repeating codes are identical
-  if (download.repeatingCode === export_.repeatingCode &&
-      download.codeBefore === export_.codeBefore &&
-      download.codeAfter === export_.codeAfter) {
-    diffs.push({
-      severity: 'info',
-      message: 'Download en Export zijn identiek',
-    })
+    // Compare headers
+    if (download.codeBefore !== export_.codeBefore) {
+      diffs.push({
+        severity: 'warning',
+        message: 'Code Before (header) verschilt',
+      })
+    }
+
+    // Compare column counts
+    if (download.dataColCount !== export_.dataColCount) {
+      diffs.push({
+        severity: 'warning',
+        message: `Kolom-aantal verschilt: Download ${download.dataColCount}, Export ${export_.dataColCount}`,
+      })
+    }
+
+    // Compare Code After
+    if (download.codeAfter !== export_.codeAfter) {
+      diffs.push({
+        severity: 'info',
+        message: 'Code After verschilt',
+      })
+    }
   }
 
   return diffs

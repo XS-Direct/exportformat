@@ -24,6 +24,33 @@ async function onSelectModel(model: PaceModelInfo): Promise<void> {
   screen.value = 'editor'
 }
 
+async function onCreateModel(type: 'download' | 'export', client: string, basedOn: PaceModelInfo): Promise<void> {
+  // Load the existing model as starting point
+  await store.loadSnapshotById(basedOn.id)
+  screen.value = 'editor'
+
+  if (type === 'export') {
+    // Creating Export from Download: add <<exportedId>> and newline
+    let code = store.repeatingCode
+    if (!code.endsWith('\n')) code += '\n'
+    if (!code.includes('<<exportedId=')) {
+      code += '<<exportedId={471: id}>>\n'
+    }
+    store.repeatingCode = code
+  } else {
+    // Creating Download from Export: remove <<exportedId>> and <<...>> directives
+    store.repeatingCode = store.repeatingCode
+      .replace(/\n<<exportedId=[^>]+>>\s*/g, '\n')
+      .replace(/\n<<[^>]+>>\s*$/g, '\n')
+  }
+
+  // Update the snapshot title to reflect the new model
+  const newTitle = type === 'download' ? `download${client.replace(/\s/g, '')}` : `export${client.replace(/\s/g, '')}`
+  if (store.snapshot) {
+    store.snapshot = { ...store.snapshot, title: newTitle }
+  }
+}
+
 function backToPicker(): void {
   screen.value = 'picker'
 }
@@ -36,7 +63,7 @@ function backToPicker(): void {
       <div class="text-sm font-semibold text-slate-800">Pace Editor</div>
       <div class="ml-auto text-[11px] text-slate-400">Kies een klant</div>
     </div>
-    <ClientPicker @select="onSelectModel" />
+    <ClientPicker @select="onSelectModel" @create="onCreateModel" />
   </div>
 
   <!-- Editor screen -->
