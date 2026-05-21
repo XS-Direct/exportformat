@@ -93,19 +93,38 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   }
 
   if (message.type === 'PACE_WRITE_REPEATING_CODE') {
-    // Try visible edit form first, then fall back to hidden block textarea by ID
-    let textarea = findTextarea('Repeating code')
-    if (!textarea && (message as { blockId?: string }).blockId) {
-      const blockId = (message as { blockId?: string }).blockId
-      textarea = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc-${blockId}"]`)
-      console.log(`[pace-editor][content] fallback to hidden textarea dsc-${blockId}: found=${!!textarea}`)
-    }
-    if (!textarea) {
-      sendResponse({ ok: false, error: 'Repeating code textarea not found' })
-      return true
-    }
+    const blockId = message.blockId
     try {
-      writeTextareaValue(textarea, message.value)
+      // Write repeating code
+      let dsc = findTextarea('Repeating code')
+      if (!dsc && blockId) {
+        dsc = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc-${blockId}"]`)
+      }
+      if (!dsc) {
+        sendResponse({ ok: false, error: 'Repeating code textarea not found' })
+        return true
+      }
+      writeTextareaValue(dsc, message.value)
+
+      // Write Code Before (if provided)
+      if (message.codeBefore !== undefined) {
+        let before = findTextarea('Code before')
+        if (!before && blockId) {
+          before = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc_before-${blockId}"]`)
+        }
+        if (before) writeTextareaValue(before, message.codeBefore)
+      }
+
+      // Write Code After (if provided)
+      if (message.codeAfter !== undefined) {
+        let after = findTextarea('Code after')
+        if (!after && blockId) {
+          after = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc_after-${blockId}"]`)
+        }
+        if (after) writeTextareaValue(after, message.codeAfter)
+      }
+
+      console.log(`[pace-editor][content] wrote all fields to block ${blockId ?? 'edit-form'}`)
       sendResponse({ ok: true })
     } catch (err) {
       sendResponse({ ok: false, error: (err as Error).message })

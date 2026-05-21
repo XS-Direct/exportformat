@@ -187,13 +187,12 @@ export const useEditorStore = defineStore('editor', () => {
     writeError.value = null
     copiedToClipboard.value = false
     try {
-      // Try writing with block ID so it can target the hidden textarea directly
-      const msg: ExtensionMessage & { blockId?: string } = {
+      const msg: ExtensionMessage = {
         type: 'PACE_WRITE_REPEATING_CODE',
         value: repeatingCode.value,
-      }
-      if (activeBlockId.value) {
-        msg.blockId = activeBlockId.value
+        codeBefore: codeBefore.value,
+        codeAfter: codeAfter.value,
+        blockId: activeBlockId.value ?? undefined,
       }
       const reply = await chrome.runtime.sendMessage(msg)
       if (!reply || reply.ok !== true) {

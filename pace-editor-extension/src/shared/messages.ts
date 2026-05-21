@@ -29,7 +29,7 @@ export type ExtensionMessage =
   | { type: 'PACE_REQUEST_SNAPSHOT_BY_ID'; blockId: string }
   | { type: 'PACE_LIST_MODELS' }
   | { type: 'PACE_SNAPSHOT'; snapshot: PaceModelSnapshot }
-  | { type: 'PACE_WRITE_REPEATING_CODE'; value: string }
+  | { type: 'PACE_WRITE_REPEATING_CODE'; value: string; codeBefore?: string; codeAfter?: string; blockId?: string }
   | { type: 'PACE_WRITE_RESULT'; ok: boolean; error?: string }
   | { type: 'PACE_CONTEXT_LOST' }
 
