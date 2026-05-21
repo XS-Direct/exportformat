@@ -93,7 +93,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   }
 
   if (message.type === 'PACE_WRITE_REPEATING_CODE') {
-    const textarea = findTextarea('Repeating code')
+    // Try visible edit form first, then fall back to hidden block textarea by ID
+    let textarea = findTextarea('Repeating code')
+    if (!textarea && (message as { blockId?: string }).blockId) {
+      const blockId = (message as { blockId?: string }).blockId
+      textarea = document.querySelector<HTMLTextAreaElement>(`textarea[name="dsc-${blockId}"]`)
+      console.log(`[pace-editor][content] fallback to hidden textarea dsc-${blockId}: found=${!!textarea}`)
+    }
     if (!textarea) {
       sendResponse({ ok: false, error: 'Repeating code textarea not found' })
       return true

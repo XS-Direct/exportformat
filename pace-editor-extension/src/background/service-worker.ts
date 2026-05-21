@@ -102,11 +102,16 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
   }
   if (sender.tab) return false
   void (async () => {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+    // First try the active tab, then search for any Pace tab
+    let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+    if (!tab?.id || !tab.url?.includes('pace-bp.xsdirect.nl')) {
+      // Active tab is not Pace — search for a Pace tab
+      const paceTabs = await chrome.tabs.query({ url: 'https://pace-bp.xsdirect.nl/*' })
+      if (paceTabs.length > 0) tab = paceTabs[0]
+    }
     console.log('[pace-editor][bg] forwarding', message.type, 'to tab:', tab?.id, tab?.url)
     if (!tab?.id) {
-      console.warn('[pace-editor][bg] no active tab found')
-      sendResponse({ ok: false, error: 'No active tab' })
+      sendResponse({ ok: false, error: 'Geen Pace tab gevonden. Open pace-bp.xsdirect.nl.' })
       return
     }
     try {

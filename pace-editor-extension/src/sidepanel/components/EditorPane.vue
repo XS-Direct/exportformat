@@ -4,11 +4,37 @@ import { useEditorStore } from '../store'
 import { serialize } from '@shared/serializer'
 import { parse } from '@shared/parser'
 import { extractAllFieldRefs } from '@shared/auto-fixtures'
+import type { ExtensionMessage, PaceModelInfo } from '@shared/messages'
 import ColumnEditor from './ColumnEditor.vue'
 import BlockTree from './BlockTree.vue'
 
 const store = useEditorStore()
 const mode = ref<'columns' | 'blocks' | 'raw'>('columns')
+const showImport = ref(false)
+const importing = ref(false)
+
+// Find sibling models (same client, different type) + all other models
+const importOptions = computed(() => {
+  const current = store.snapshot?.title ?? ''
+  return store.models.filter((m) => m.title !== current)
+})
+
+async function importFrom(model: PaceModelInfo): Promise<void> {
+  importing.value = true
+  try {
+    const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
+      type: 'PACE_REQUEST_SNAPSHOT_BY_ID',
+      blockId: model.id,
+    })
+    if (reply?.ok && reply.snapshot) {
+      store.codeBefore = reply.snapshot.codeBefore
+      store.repeatingCode = reply.snapshot.repeatingCode
+      store.codeAfter = reply.snapshot.codeAfter
+    }
+  } catch { /* silent */ }
+  importing.value = false
+  showImport.value = false
+}
 
 const tree = computed(() => store.parsed.tree)
 
@@ -41,6 +67,34 @@ const usedFields = computed(() =>
           :class="mode === 'raw' ? 'bg-white font-semibold text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'"
           @click="mode = 'raw'"
         >Raw</button>
+      </div>
+    </div>
+
+    <!-- Import from other model -->
+    <div class="flex items-center gap-1">
+      <button
+        class="rounded border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100"
+        @click="showImport = !showImport; if (showImport) store.loadModels()"
+      >Importeer van...</button>
+    </div>
+
+    <div v-if="showImport" class="rounded border border-violet-200 bg-violet-50 p-2">
+      <p class="mb-1.5 text-[11px] text-violet-800">Kies een model om de code over te nemen:</p>
+      <div class="max-h-48 overflow-y-auto space-y-0.5">
+        <button
+          v-for="m in importOptions"
+          :key="m.id"
+          class="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-violet-100"
+          :disabled="importing"
+          @click="importFrom(m)"
+        >
+          <span
+            class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+            :class="m.type === 'download' ? 'bg-sky-100 text-sky-800' : m.type === 'export' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'"
+          >{{ m.type === 'download' ? 'DL' : m.type === 'export' ? 'EX' : '?' }}</span>
+          <span class="font-medium text-slate-800">{{ m.client }}</span>
+          <span class="text-[10px] text-slate-400">{{ m.title }} #{{ m.id }}</span>
+        </button>
       </div>
     </div>
 

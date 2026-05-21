@@ -23,6 +23,7 @@ const HISTORY_DEBOUNCE_MS = 400
 export const useEditorStore = defineStore('editor', () => {
   const tab = ref<Tab>('editor')
   const snapshot = ref<PaceModelSnapshot | null>(null)
+  const activeBlockId = ref<string | null>(null)
   const loadError = ref<string | null>(null)
   const writing = ref(false)
   const writeError = ref<string | null>(null)
@@ -186,12 +187,16 @@ export const useEditorStore = defineStore('editor', () => {
     writeError.value = null
     copiedToClipboard.value = false
     try {
-      const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
+      // Try writing with block ID so it can target the hidden textarea directly
+      const msg: ExtensionMessage & { blockId?: string } = {
         type: 'PACE_WRITE_REPEATING_CODE',
         value: repeatingCode.value,
-      })
+      }
+      if (activeBlockId.value) {
+        msg.blockId = activeBlockId.value
+      }
+      const reply = await chrome.runtime.sendMessage(msg)
       if (!reply || reply.ok !== true) {
-        // Textarea not found — copy to clipboard instead
         try {
           await navigator.clipboard.writeText(repeatingCode.value)
           copiedToClipboard.value = true
@@ -232,6 +237,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   async function loadSnapshotById(blockId: string): Promise<void> {
     loadError.value = null
+    activeBlockId.value = blockId
     try {
       const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
         type: 'PACE_REQUEST_SNAPSHOT_BY_ID',
