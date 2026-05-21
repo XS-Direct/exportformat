@@ -30,20 +30,63 @@ const templateSeparator = computed(() => {
   return '&#9;'
 })
 
-// Parse header names from Code Before using its own delimiter
-const headerNames = computed(() => {
-  const raw = store.codeBefore
-  if (!raw) return []
-  const cleaned = raw.replace(/\$(?:var|storevar|rem)\[[^\]]*\](?:\[[^\]]*\])?/g, '').trim()
-  if (!cleaned) return []
-  // Detect the header's delimiter
-  let sep: string | RegExp
-  if (cleaned.includes('&#9;') || cleaned.includes('\t')) sep = /&#9;|\t/
-  else if (cleaned.includes(';')) sep = ';'
-  else if (cleaned.includes(',')) sep = ','
-  else return [cleaned]
-  return cleaned.split(sep).map((s) => s.replace(/"/g, '').trim()).filter(Boolean)
-})
+// Derive column names from the DATA content (field labels, functions),
+// NOT from Code Before (which may use a different separator and column count).
+function deriveColumnName(nodes: IRNode[], index: number): string {
+  // Find the primary field reference
+  const fieldLabel = findFieldLabel(nodes)
+  if (fieldLabel) return fieldLabel
+  // Literal text
+  for (const n of nodes) {
+    if (n.kind === 'text' && n.value.trim()) {
+      const v = n.value.trim()
+      return v.length <= 25 ? v : v.slice(0, 22) + '...'
+    }
+  }
+  return `Kolom ${index + 1}`
+}
+
+function findFieldLabel(nodes: IRNode[]): string | null {
+  for (const n of nodes) {
+    if (n.kind === 'field') {
+      // "34-445: Person: Sex" → "Sex"
+      const parts = n.raw.split(':')
+      return parts[parts.length - 1].trim()
+    }
+    if (n.kind === 'func' && n.args) {
+      // Skip $var/$storevar/$rem — they're housekeeping, not data
+      if (n.name === '$var' || n.name === '$storevar' || n.name === '$rem') continue
+      // For $date, show "Datum" + source field
+      if (n.name === '$date' && n.args[0]) {
+        const inner = findFieldLabel(n.args[0].nodes)
+        return inner ? `Datum: ${inner}` : 'Datum'
+      }
+      // For $if/$ifelse, look in the THEN/ELSE branches for fields
+      if ((n.name === '$if' || n.name === '$ifelse') && n.args.length >= 2) {
+        for (const arg of n.args.slice(1)) {
+          const inner = findFieldLabel(arg.nodes)
+          if (inner) return inner
+        }
+        // If branches have no fields, look in the condition for context
+        if (n.args[0]) {
+          const condField = findFieldLabel(n.args[0].nodes)
+          if (condField) return condField
+        }
+      }
+      // For $substr/$replace, look in the input arg
+      if ((n.name === '$substr' || n.name === '$replace') && n.args[0]) {
+        const inner = findFieldLabel(n.args[n.name === '$replace' ? 2 : 0]?.nodes ?? [])
+        if (inner) return inner
+      }
+      // Generic: search all args
+      for (const arg of n.args) {
+        const inner = findFieldLabel(arg.nodes)
+        if (inner) return inner
+      }
+    }
+  }
+  return null
+}
 
 // Split IR tree into columns by the detected separator
 function splitIntoColumns(tree: IRTree): IRNode[][] {
@@ -107,7 +150,7 @@ const columns = computed<Column[]>(() => {
     nodes,
     code: serialize(nodes),
     preview: previewColumn(nodes),
-    headerName: headerNames.value[i] ?? columnTitle(nodes, i, ''),
+    headerName: deriveColumnName(nodes, i),
   }))
 })
 
@@ -172,30 +215,6 @@ function collectDescriptions(nodes: IRNode[], out: string[]): void {
   }
 }
 
-// Generate a short title for the column based on its primary field
-function columnTitle(nodes: IRNode[], index: number, headerName: string): string {
-  if (headerName) return headerName
-  // Try to find the primary field
-  const fields: string[] = []
-  collectFieldLabels(nodes, fields)
-  if (fields.length > 0) return fields[0]
-  // Check for text literals
-  for (const n of nodes) {
-    if (n.kind === 'text' && n.value.trim()) return `"${n.value.trim().slice(0, 20)}"`
-  }
-  return `Kolom ${index + 1}`
-}
-
-function collectFieldLabels(nodes: IRNode[], out: string[]): void {
-  for (const n of nodes) {
-    if (n.kind === 'field') {
-      const colon = n.raw.indexOf(':')
-      out.push(colon >= 0 ? n.raw.slice(colon + 1).trim().split(':').pop()!.trim() : n.raw)
-    } else if (n.kind === 'func' && n.args) {
-      for (const arg of n.args) collectFieldLabels(arg.nodes, out)
-    }
-  }
-}
 
 function applyChanges(newCols: IRNode[][]): void {
   store.repeatingCode = serialize(joinColumns(newCols))
