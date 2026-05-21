@@ -85,17 +85,22 @@ class TokenStream {
 }
 
 function parseAtom(ts: TokenStream): boolean | string {
-  const tok = ts.next()
+  const tok = ts.peek()
   if (!tok) return ''
   if (tok.kind === 'lparen') {
+    ts.next()
     const value = parseOr(ts)
-    const close = ts.next()
-    void close // close paren may legitimately be absent at EOF; we already consumed what we can
+    if (ts.peek()?.kind === 'rparen') ts.next()
     return value
   }
-  if (tok.kind === 'lit') return tok.value
-  // Stray operator at the head of an atom — treat as empty literal so a
-  // malformed condition collapses to falsy rather than blowing up.
+  if (tok.kind === 'lit') {
+    ts.next()
+    return tok.value
+  }
+  // Not an atom (operator/separator at the head). Leave the token in the
+  // stream for the outer parser and return an empty literal — that way
+  // `X !=  && Y == 1` parses as `(X != "") && (Y == 1)` instead of
+  // accidentally consuming the `&&` into the right-hand side.
   return ''
 }
 

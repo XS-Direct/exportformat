@@ -114,9 +114,55 @@ function evalFunc(node: FuncNode, ctx: EvalContext): string {
     }
 
     case '$strtolower': return evalArg(args[0], ctx).toLowerCase()
-    case '$strtoupper': return evalArg(args[0], ctx).toUpperCase()
+    case '$strtoupper':
+    case '$upper':
+      return evalArg(args[0], ctx).toUpperCase()
+    case '$ucfirst': {
+      const s = evalArg(args[0], ctx)
+      return s.charAt(0).toUpperCase() + s.slice(1)
+    }
     case '$trim': return evalArg(args[0], ctx).trim()
     case '$strlen': return String(evalArg(args[0], ctx).length)
+
+    case '$strtotime': {
+      // Pace inherits PHP's strtotime() semantics. Real PHP recognises a
+      // long list of phrases; we cover the ones we've seen in production
+      // templates (first day / last day, today/tomorrow/yesterday) and
+      // fall back to native Date parsing for anything else.
+      const expr = evalArg(args[0], ctx).trim().toLowerCase()
+      const now = new Date()
+      const iso = (d: Date) =>
+        `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+      if (expr === 'today' || expr === 'now') return iso(now)
+      if (expr === 'tomorrow') return iso(new Date(now.getTime() + 86400000))
+      if (expr === 'yesterday') return iso(new Date(now.getTime() - 86400000))
+      if (expr === 'first day of this month') return iso(new Date(now.getFullYear(), now.getMonth(), 1))
+      if (expr === 'first day of next month') return iso(new Date(now.getFullYear(), now.getMonth() + 1, 1))
+      if (expr === 'first day of last month') return iso(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+      if (expr === 'last day of this month') return iso(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+      if (expr === 'last day of next month') return iso(new Date(now.getFullYear(), now.getMonth() + 2, 0))
+      const native = new Date(expr)
+      return Number.isNaN(native.getTime()) ? expr : iso(native)
+    }
+
+    case '$query':
+      // Pace executes SQL against its own database at export time. The
+      // simulator obviously can't, so $query degrades to an empty string
+      // — that matches what real templates use $query for (lookups whose
+      // result is downstream-formatted), and keeps preview output
+      // predictable.
+      return ''
+
+    case '$storevar':
+      // Real Pace uses $storevar[name] as a "commit" of a counter to the
+      // export stream. For our purposes it behaves the same as $var:
+      // one arg reads, two args write.
+      if (args.length === 1) return ctx.vars.get(evalArg(args[0], ctx)) ?? ''
+      if (args.length >= 2) {
+        ctx.vars.set(evalArg(args[0], ctx), evalArg(args[1], ctx))
+        return ''
+      }
+      return ''
 
     case '$pad': {
       // $pad[input][length][padChar?][direction?]
@@ -143,6 +189,10 @@ function evalFunc(node: FuncNode, ctx: EvalContext): string {
       if (node.args === null) return node.name
       return node.name + node.args.map((a) => `[${evalArg(a, ctx)}]`).join('')
   }
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
 }
 
 function formatDate(format: string, d: Date): string {

@@ -2,6 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { parse } from '../src/shared/parser'
 import { serialize } from '../src/shared/serializer'
 import { AIDSFONDS_REPEATING_CODE } from '../src/shared/fixtures/aidsfonds'
+import {
+  ALZHEIMER_NL_CODE_BEFORE,
+  ALZHEIMER_NL_REPEATING_CODE,
+} from '../src/shared/fixtures/alzheimer-nl'
+import {
+  AMNESTY_CODE_BEFORE,
+  AMNESTY_REPEATING_CODE,
+} from '../src/shared/fixtures/amnesty'
+import {
+  AMREF_CODE_BEFORE,
+  AMREF_REPEATING_CODE,
+} from '../src/shared/fixtures/amref'
 
 const corpus: string[] = [
   '',
@@ -26,6 +38,18 @@ const corpus: string[] = [
   // The whole Aidsfonds template — this is the canonical round-trip
   // bar that protects the parser/serializer against regressions.
   AIDSFONDS_REPEATING_CODE,
+  // Alzheimer NL: nested $ifelse routing + $upper + $strtotime + <<…>>
+  // literal envelope at the end of the template.
+  ALZHEIMER_NL_CODE_BEFORE,
+  ALZHEIMER_NL_REPEATING_CODE,
+  // Amnesty: comma-separated CSV with welcome-call branching, embedded
+  // single quotes around field-ref operands.
+  AMNESTY_CODE_BEFORE,
+  AMNESTY_REPEATING_CODE,
+  // Amref: country-code switch + inline $query[SELECT … LIMIT 1;] with
+  // a templated WHERE clause referencing {471: id}.
+  AMREF_CODE_BEFORE,
+  AMREF_REPEATING_CODE,
 ]
 
 describe('round-trip', () => {

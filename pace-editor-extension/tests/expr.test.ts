@@ -43,4 +43,22 @@ describe('evaluateCondition', () => {
     expect(evaluateCondition('')).toBe(false)
     expect(evaluateCondition('0')).toBe(false)
   })
+
+  it('handles an empty right-hand operand (Pace "not empty" check)', () => {
+    // After template substitution, `{Prefix} !=` collapses to `value !=`
+    // when Prefix has a value, and to ` !=` when it does not. The "not
+    // empty" idiom needs both forms to behave correctly.
+    expect(evaluateCondition('von !=')).toBe(true)
+    expect(evaluateCondition(' !=')).toBe(false)
+    expect(evaluateCondition('von ==')).toBe(false)
+  })
+
+  it('does not eat the next && when the right operand is empty', () => {
+    // Regression: parseAtom used to consume the && token, so the right
+    // side of the && silently evaluated to true. With the peek-only fix
+    // the second clause is now reached.
+    expect(evaluateCondition('von != && Y == 1')).toBe(false)
+    expect(evaluateCondition('von != && Y == Y')).toBe(true)
+    expect(evaluateCondition(' != && anything')).toBe(false)
+  })
 })

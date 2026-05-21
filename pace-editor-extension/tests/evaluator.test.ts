@@ -75,4 +75,32 @@ describe('evaluator', () => {
   it('counts rows via $count', () => {
     expect(evalString('$count', {}, 4)).toBe('5')
   })
+
+  it('uppercases via $upper (alias of $strtoupper)', () => {
+    expect(evalString('$upper[utrecht]')).toBe('UTRECHT')
+    expect(evalString('$strtoupper[utrecht]')).toBe('UTRECHT')
+  })
+
+  it('capitalises the first letter via $ucfirst', () => {
+    expect(evalString('$ucfirst[female]')).toBe('Female')
+    expect(evalString('$ucfirst[]')).toBe('')
+  })
+
+  it('renders $strtotime[first day of next month] as an ISO date', () => {
+    const out = evalString('$strtotime[first day of next month]')
+    expect(out).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('feeds $strtotime into $date for relative-date columns', () => {
+    const formatted = evalString('$date[$strtotime[first day of next month]][%Y-%m-%d]')
+    expect(formatted).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('$query returns empty (real Pace executes SQL, simulator cannot)', () => {
+    expect(evalString(`$query[SELECT 1 FROM t WHERE id = '{x}']`, { x: 'A' })).toBe('')
+  })
+
+  it('$storevar reads with one arg, writes with two', () => {
+    expect(evalString('$storevar[v][hello]$storevar[v]')).toBe('hello')
+  })
 })

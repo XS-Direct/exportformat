@@ -54,9 +54,18 @@ Zie [`docs/install.md`](docs/install.md) voor uitgebreidere instructies.
 
 De parser produceert een Intermediate Representation (`src/shared/ir-types.ts`)
 waarvan `serialize(parse(x)) === x` geldt voor elke template die de parser
-accepteert. De corpus in `tests/roundtrip.test.ts` bevat onder andere de
-**hele productie-Aidsfonds-template**, byte-identical — wijzigingen aan parser
-of serializer die deze identiteit breken falen direct in CI.
+accepteert. De corpus in `tests/roundtrip.test.ts` bevat de **vier
+productie-templates** byte-identical:
+
+| Model | Code before | Repeating code |
+| --- | --- | --- |
+| downloadAidsfonds | — | `AIDSFONDS_REPEATING_CODE` |
+| downloadAlzheimerNederland | `ALZHEIMER_NL_CODE_BEFORE` | `ALZHEIMER_NL_REPEATING_CODE` |
+| downloadAmnestyInternational | `AMNESTY_CODE_BEFORE` | `AMNESTY_REPEATING_CODE` |
+| downloadAmref | `AMREF_CODE_BEFORE` | `AMREF_REPEATING_CODE` (incl. `$query[SQL]`) |
+
+Wijzigingen aan parser of serializer die deze identiteit op één van deze
+templates breken, falen direct in CI.
 
 ## Pace template-syntax (samenvatting)
 
@@ -69,6 +78,12 @@ of serializer die deze identiteit breken falen direct in CI.
 | Conditie-expressie | `{x} == 205 || {y} > 100 && 'a' == 'b'` | `==`, `!=`, `>`, `<`, `>=`, `<=`, `&&`, `\|\|`, single-quoted strings |
 | Datumformaat | `$date[{476}][%Y%m%d]` | strftime-stijl met `%`-prefix |
 | HTML tab | `&#9;` | Pace gebruikt deze entity als kolom-separator |
+| Empty-operand check | `{Prefix} !=` | "niet leeg" — rechterkant is impliciet `""` |
+| `$ucfirst` | `$ucfirst[female]` → `Female` | Hoofdletter eerste teken |
+| `$upper` | `$upper[utrecht]` → `UTRECHT` | Alias van `$strtoupper` |
+| `$strtotime` | `$strtotime[first day of next month]` | PHP-stijl relatieve datum → ISO |
+| `$query` | `$query[SELECT … LIMIT 1;]` | SQL-lookup in Pace; simulator returnt `""` |
+| `$storevar` | `$storevar[count]` | Alias van `$var` (read/write afhankelijk van arg-count) |
 
 ## Beveiliging
 
