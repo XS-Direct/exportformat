@@ -54,18 +54,43 @@ function evalArg(arg: FuncArg | undefined, ctx: EvalContext): string {
   return evaluate(arg.nodes, ctx)
 }
 
+// Evaluate simple arithmetic expressions that Pace supports in $var values.
+// Handles patterns like "0 + 1", "5 - 2", "3 * 4", "{var:count} + 1" after
+// field substitution. Returns the original string if it's not arithmetic.
+function evalArithmetic(s: string): string {
+  const trimmed = s.trim()
+  // Try simple binary: number op number
+  const m = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*([+\-*/%])\s*(-?\d+(?:\.\d+)?)$/)
+  if (m) {
+    const a = parseFloat(m[1])
+    const op = m[2]
+    const b = parseFloat(m[3])
+    let result: number
+    switch (op) {
+      case '+': result = a + b; break
+      case '-': result = a - b; break
+      case '*': result = a * b; break
+      case '/': result = b !== 0 ? a / b : 0; break
+      case '%': result = b !== 0 ? a % b : 0; break
+      default: return trimmed
+    }
+    return Number.isInteger(result) ? String(result) : result.toFixed(2)
+  }
+  return trimmed
+}
+
 function evalFunc(node: FuncNode, ctx: EvalContext): string {
   const args = node.args ?? []
   switch (node.name) {
     case '$var': {
       // $var[name]          → read variable
-      // $var[name][value]   → store value and return empty so the call
-      //                       doesn't pollute the surrounding template
+      // $var[name][value]   → store value, evaluate arithmetic, return empty
       if (args.length === 1) {
         return ctx.vars.get(evalArg(args[0], ctx)) ?? ''
       }
       if (args.length >= 2) {
-        ctx.vars.set(evalArg(args[0], ctx), evalArg(args[1], ctx))
+        const raw = evalArg(args[1], ctx)
+        ctx.vars.set(evalArg(args[0], ctx), evalArithmetic(raw))
         return ''
       }
       return ''
@@ -131,6 +156,29 @@ function evalFunc(node: FuncNode, ctx: EvalContext): string {
       // Concatenation in the new syntax means writing args adjacent to one
       // another — $concat is therefore a passthrough that joins them.
       return args.map((a) => evalArg(a, ctx)).join('')
+
+    case '$storevar': {
+      // $storevar[name] — persists the variable for the next row. In the
+      // real Pace runtime this writes to server-side state; in the simulator
+      // it's equivalent to a no-op read (the var was already set by $var).
+      // It never produces output.
+      return ''
+    }
+
+    case '$rem': {
+      // $rem[comment] — developer comment, never produces output.
+      return ''
+    }
+
+    case '$query': {
+      // $query[sql] — database query, can't be simulated. Return placeholder.
+      return '(query)'
+    }
+
+    case '$getuuid': {
+      // $getuuid[] — generate a UUID placeholder.
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+    }
 
     case '$count': return String(ctx.rowIndex + 1)
     case '$linebreak': return '\n'

@@ -5,6 +5,7 @@ import { serialize } from '@shared/serializer'
 import type { IRTree } from '@shared/ir-types'
 import type { ExtensionMessage, PaceModelSnapshot } from '@shared/messages'
 import { mergeRaws, type CatalogEntry } from '@shared/field-catalog'
+import { extractAllFieldRefs } from '@shared/auto-fixtures'
 
 export type Tab = 'editor' | 'preview' | 'simulator' | 'settings'
 
@@ -143,15 +144,19 @@ export const useEditorStore = defineStore('editor', () => {
 
   async function loadSnapshot(): Promise<void> {
     loadError.value = null
+    console.log('[pace-editor][panel] loadSnapshot() called')
     try {
       const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
         type: 'PACE_REQUEST_SNAPSHOT',
       })
+      console.log('[pace-editor][panel] reply:', JSON.stringify(reply).slice(0, 200))
       if (!reply || reply.ok !== true) {
         loadError.value = reply?.error ?? 'No response from content script'
+        console.warn('[pace-editor][panel] loadError:', loadError.value)
         return
       }
       const snap = reply.snapshot as PaceModelSnapshot
+      console.log('[pace-editor][panel] snapshot loaded, title:', snap.title, 'repeatingCode length:', snap.repeatingCode?.length)
       snapshot.value = snap
       suppressHistory = true
       codeBefore.value = snap.codeBefore
@@ -161,8 +166,13 @@ export const useEditorStore = defineStore('editor', () => {
         suppressHistory = false
         resetHistory()
       })
-      if (snap.fields.length) {
-        catalog.value = await mergeRaws(snap.fields)
+      // Build the field catalog from two sources:
+      // 1. Fields scraped from the Pace DOM (the "Fields" strip)
+      // 2. Fields extracted from the template code itself (always works)
+      const templateFields = extractAllFieldRefs(snap.codeBefore, snap.repeatingCode, snap.codeAfter)
+      const allFields = [...new Set([...snap.fields, ...templateFields])]
+      if (allFields.length) {
+        catalog.value = await mergeRaws(allFields)
       }
     } catch (err) {
       loadError.value = (err as Error).message

@@ -75,14 +75,18 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
   if (sender.tab) return false
   void (async () => {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+    console.log('[pace-editor][bg] forwarding', message.type, 'to tab:', tab?.id, tab?.url)
     if (!tab?.id) {
+      console.warn('[pace-editor][bg] no active tab found')
       sendResponse({ ok: false, error: 'No active tab' })
       return
     }
     try {
       const reply = await chrome.tabs.sendMessage(tab.id, message)
+      console.log('[pace-editor][bg] got reply from content:', reply?.ok, 'error:', reply?.error)
       sendResponse(reply)
     } catch (err) {
+      console.error('[pace-editor][bg] sendMessage failed:', (err as Error).message)
       sendResponse({ ok: false, error: (err as Error).message })
     }
   })()

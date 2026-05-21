@@ -12,25 +12,24 @@ function buildOpenButton(): HTMLButtonElement {
   const btn = document.createElement('button')
   btn.id = BUTTON_ID
   btn.type = 'button'
-  btn.textContent = '✎ Open visual editor'
+  btn.textContent = '\u270E Open visual editor'
   btn.title = 'Open the Pace Visual Template Editor side panel'
-  // Inline styles only — Pace stylesheets can be aggressive, and we want
-  // the button to look the same regardless of which page subtree it lands in.
   Object.assign(btn.style, {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
+    display: 'inline-block',
     margin: '4px 0',
-    padding: '6px 10px',
-    fontSize: '12px',
+    padding: '4px 8px',
+    fontSize: '11px',
     fontWeight: '600',
     color: '#fff',
     background: '#2563eb',
     border: '1px solid #1d4ed8',
-    borderRadius: '6px',
+    borderRadius: '4px',
     cursor: 'pointer',
     boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-    zIndex: '2147483647',
+    position: 'relative',
+    zIndex: '1',
+    width: 'auto',
+    maxWidth: 'fit-content',
   } as Partial<CSSStyleDeclaration>)
   btn.addEventListener('click', (ev) => {
     ev.preventDefault()
@@ -45,8 +44,6 @@ function ensureOpenButton(): void {
   const repeating = findTextarea('Repeating code')
   if (!repeating) return
   const btn = buildOpenButton()
-  // Place the button right above the textarea so it's visible without
-  // displacing Pace's own layout.
   repeating.parentElement?.insertBefore(btn, repeating)
 }
 
@@ -62,19 +59,24 @@ function syncForCurrentRoute(): void {
   }
 }
 
-// Pace is a single-page app with hash routing, so we react to both
-// hashchange events (route swap) and DOM mutations (late hydration of the
-// modelEdit panel after the route swap).
+// Throttle the MutationObserver so we don't call findActiveModelId on every
+// single DOM mutation (the page has 234+ textareas).
+let syncTimer: ReturnType<typeof setTimeout> | null = null
+function throttledSync(): void {
+  if (syncTimer) return
+  syncTimer = setTimeout(() => {
+    syncTimer = null
+    syncForCurrentRoute()
+  }, 200)
+}
+
 window.addEventListener('hashchange', syncForCurrentRoute)
 
-const observer = new MutationObserver(() => syncForCurrentRoute())
+const observer = new MutationObserver(throttledSync)
 observer.observe(document.body, { childList: true, subtree: true })
 
 syncForCurrentRoute()
 
-// Build the snapshot the side panel needs to render the editor. Kept here
-// (rather than in the background worker) because only the content script
-// has access to Pace's DOM.
 function buildSnapshot(): PaceModelSnapshot | { error: string } {
   const state = readPaceState()
   if (!state.ok) return { error: state.reason ?? 'unknown error reading Pace state' }
@@ -91,11 +93,14 @@ function buildSnapshot(): PaceModelSnapshot | { error: string } {
 }
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+  console.log('[pace-editor][content] received message:', message.type)
   if (message.type === 'PACE_REQUEST_SNAPSHOT') {
     const snap = buildSnapshot()
     if ('error' in snap) {
+      console.warn('[pace-editor][content] snapshot error:', snap.error)
       sendResponse({ ok: false, error: snap.error })
     } else {
+      console.log('[pace-editor][content] snapshot OK, title:', snap.title, 'repeatingCode length:', snap.repeatingCode.length)
       sendResponse({ ok: true, snapshot: snap })
     }
     return true

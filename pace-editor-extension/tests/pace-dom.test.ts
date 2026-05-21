@@ -11,36 +11,50 @@ import {
   readPaceState,
 } from '../src/content/pace-dom'
 
+// Simulate the real Pace modelEdit page structure. The real page has:
+// - Multiple models with textareas named dsc_before-{id}, dsc-{id}, dsc_after-{id}
+// - Labels like "Code before", "Repeating code", "Code after"
+// - Only the active model's elements are visible (others have display:none)
 function setupPaceLikePage(): void {
   document.body.innerHTML = `
     <div>
-      <div class="field">
-        <label>Title</label>
-        <input type="text" value="downloadAlzheimer" />
+      <!-- Active model (visible) -->
+      <div class="model-panel" id="model-452">
+        <div class="field">
+          <label>Title</label>
+          <input type="text" value="downloadAlzheimer" />
+        </div>
+        <div class="field">
+          <label>Output</label>
+          <label><input type="radio" name="out" /> JSON</label>
+          <label><input type="radio" name="out" checked /> Custom</label>
+        </div>
+        <div class="field">
+          <span class="textarea-dsc">Code before</span>
+          <textarea name="dsc_before-452">HEADER</textarea>
+        </div>
+        <div class="field">
+          <span class="textarea-dsc">Repeating code</span>
+          <textarea name="dsc-452">{471: id}\\t{34-445: Person: Sex}</textarea>
+        </div>
+        <div class="field">
+          <span class="textarea-dsc">Code after</span>
+          <textarea name="dsc_after-452">FOOTER</textarea>
+        </div>
+        <div class="strip">
+          <div>Fields</div>
+          <span>{471: id}</span>
+          <span>{34-445: Person: Sex}</span>
+          <span>{12-100: Org}</span>
+          <span>not-a-field</span>
+        </div>
       </div>
-      <div class="field">
-        <label>Output</label>
-        <label><input type="radio" name="out" /> JSON</label>
-        <label><input type="radio" name="out" checked /> Custom</label>
-      </div>
-      <div class="field">
-        <label>Code before</label>
-        <textarea>HEADER</textarea>
-      </div>
-      <div class="field">
-        <label>Repeating code</label>
-        <textarea>{471: id}\\t{34-445: Person: Sex}</textarea>
-      </div>
-      <div class="field">
-        <label>Code after</label>
-        <textarea>FOOTER</textarea>
-      </div>
-      <div class="strip">
-        <div>Fields</div>
-        <span>{471: id}</span>
-        <span>{34-445: Person: Sex}</span>
-        <span>{12-100: Org}</span>
-        <span>not-a-field</span>
+      <!-- Hidden model (should be ignored) -->
+      <div class="model-panel" id="model-458" style="display:none">
+        <div class="field">
+          <span class="textarea-dsc">Repeating code</span>
+          <textarea name="dsc-458">OTHER MODEL DATA</textarea>
+        </div>
       </div>
     </div>
   `
@@ -55,19 +69,28 @@ describe('pace-dom', () => {
     expect(isModelEditRoute('')).toBe(false)
   })
 
-  it('finds the Repeating code textarea by label text', () => {
+  it('finds the Repeating code textarea by name via active model', () => {
     const ta = findTextarea('Repeating code')
     expect(ta).not.toBeNull()
     expect(ta!.value).toContain('{471: id}')
+    expect(ta!.name).toBe('dsc-452')
   })
 
-  it('finds Code before and Code after by label', () => {
+  it('finds Code before and Code after by name', () => {
     expect(findTextarea('Code before')!.value).toBe('HEADER')
+    expect(findTextarea('Code before')!.name).toBe('dsc_before-452')
     expect(findTextarea('Code after')!.value).toBe('FOOTER')
+    expect(findTextarea('Code after')!.name).toBe('dsc_after-452')
   })
 
   it('finds the Title input', () => {
     expect(findTitleInput()!.value).toBe('downloadAlzheimer')
+  })
+
+  it('ignores hidden model textareas', () => {
+    const ta = findTextarea('Repeating code')
+    expect(ta).not.toBeNull()
+    expect(ta!.value).not.toContain('OTHER MODEL DATA')
   })
 
   it('scrapes field refs from the Fields strip', () => {
