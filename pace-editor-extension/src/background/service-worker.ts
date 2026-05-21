@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender) => {
 // When the side panel asks for a snapshot it doesn't know which tab Pace
 // is in, so the background worker resolves that on its behalf and forwards.
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
-  const forwardTypes = ['PACE_REQUEST_SNAPSHOT', 'PACE_REQUEST_SNAPSHOT_BY_ID', 'PACE_WRITE_REPEATING_CODE', 'PACE_LIST_MODELS', 'PACE_RUN_LIVE_EXPORT']
+  const forwardTypes = ['PACE_REQUEST_SNAPSHOT', 'PACE_REQUEST_SNAPSHOT_BY_ID', 'PACE_WRITE_REPEATING_CODE', 'PACE_LIST_MODELS']
   if (!forwardTypes.includes(message.type)) {
     return false
   }

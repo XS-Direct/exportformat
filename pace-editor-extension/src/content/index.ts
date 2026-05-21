@@ -92,24 +92,6 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
     return true
   }
 
-  if (message.type === 'PACE_RUN_LIVE_EXPORT') {
-    void (async () => {
-      try {
-        // Call Pace's r.php API with the block ID — session cookies authenticate automatically
-        const resp = await fetch(`/r.php?_id=${message.blockId}`)
-        if (!resp.ok) {
-          sendResponse({ ok: false, error: `HTTP ${resp.status}` })
-          return
-        }
-        const output = await resp.text()
-        sendResponse({ ok: true, output })
-      } catch (err) {
-        sendResponse({ ok: false, error: (err as Error).message })
-      }
-    })()
-    return true
-  }
-
   if (message.type === 'PACE_WRITE_REPEATING_CODE') {
     const textarea = findTextarea('Repeating code')
     if (!textarea) {

@@ -6,6 +6,27 @@ import { saveCatalog } from '@shared/field-catalog'
 const store = useEditorStore()
 const filter = ref('')
 
+const paceToken = ref('')
+const paceTokenStored = ref(false)
+
+async function loadPaceToken(): Promise<void> {
+  const data = await chrome.storage.local.get('pace.apiToken')
+  if (data['pace.apiToken']) {
+    paceToken.value = data['pace.apiToken']
+    paceTokenStored.value = true
+  }
+}
+async function savePaceToken(): Promise<void> {
+  await chrome.storage.local.set({ 'pace.apiToken': paceToken.value })
+  paceTokenStored.value = true
+}
+async function clearPaceToken(): Promise<void> {
+  await chrome.storage.local.remove('pace.apiToken')
+  paceToken.value = ''
+  paceTokenStored.value = false
+}
+void loadPaceToken()
+
 const currentVersion = chrome.runtime.getManifest().version
 const updateStatus = ref<'idle' | 'checking' | 'available' | 'up-to-date'>('idle')
 const remoteVersion = ref('')
@@ -105,6 +126,28 @@ function exportJson(): void {
         >verwijderen</button>
       </li>
     </ul>
+
+    <section class="rounded border border-slate-200 bg-white p-2">
+      <h3 class="text-xs font-semibold text-slate-700">Pace API Token</h3>
+      <p class="mt-0.5 text-[11px] text-slate-500">Voor het downloaden van echte exports via r.php (X-Token header).</p>
+      <div v-if="paceTokenStored" class="mt-1 flex items-center gap-1">
+        <span class="text-[11px] text-emerald-700">Token opgeslagen</span>
+        <button class="ml-auto text-[10px] text-rose-600 hover:underline" @click="clearPaceToken">Wissen</button>
+      </div>
+      <div v-else class="mt-1 flex gap-1">
+        <input
+          v-model="paceToken"
+          type="password"
+          class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs font-mono"
+          placeholder="Token uit Bruno / Pace API"
+        />
+        <button
+          class="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+          :disabled="!paceToken"
+          @click="savePaceToken"
+        >Opslaan</button>
+      </div>
+    </section>
 
     <section class="rounded border border-slate-200 bg-white p-2">
       <div class="flex items-center gap-2">

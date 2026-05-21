@@ -7,7 +7,7 @@ import type { ExtensionMessage, PaceModelSnapshot, PaceModelInfo } from '@shared
 import { mergeRaws, type CatalogEntry } from '@shared/field-catalog'
 import { extractAllFieldRefs } from '@shared/auto-fixtures'
 
-export type Tab = 'editor' | 'preview' | 'simulator' | 'ai' | 'settings'
+export type Tab = 'editor' | 'preview' | 'simulator' | 'ai' | 'monitor' | 'settings'
 
 interface HistoryFrame {
   codeBefore: string

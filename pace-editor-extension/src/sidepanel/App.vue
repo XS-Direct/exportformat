@@ -8,6 +8,7 @@ import EditorPane from './components/EditorPane.vue'
 import PreviewPane from './components/PreviewPane.vue'
 import SimulatorPane from './components/SimulatorPane.vue'
 import AiAssistant from './components/AiAssistant.vue'
+import MonitorPane from './components/MonitorPane.vue'
 import SettingsPane from './components/SettingsPane.vue'
 import StatusBar from './components/StatusBar.vue'
 
@@ -60,6 +61,7 @@ function backToPicker(): void {
       <PreviewPane v-show="store.tab === 'preview'" />
       <SimulatorPane v-show="store.tab === 'simulator'" />
       <AiAssistant v-show="store.tab === 'ai'" />
+      <MonitorPane v-show="store.tab === 'monitor'" />
       <SettingsPane v-show="store.tab === 'settings'" />
     </main>
     <StatusBar />

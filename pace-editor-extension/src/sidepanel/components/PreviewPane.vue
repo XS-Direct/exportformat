@@ -4,54 +4,68 @@ import { useEditorStore } from '../store'
 import { buildAutoFixtures } from '@shared/auto-fixtures'
 import { runSimulation } from '@shared/simulator'
 
-import type { ExtensionMessage } from '@shared/messages'
-
 const store = useEditorStore()
 const showRaw = ref(false)
-const previewMode = ref<'sim' | 'live'>('sim')
-const liveOutput = ref('')
 const liveLoading = ref(false)
 const liveError = ref('')
 
-async function runLiveExport(): Promise<void> {
-  // Find the block ID from the models list or current snapshot
+// Download simulated CSV
+function downloadSimCsv(): void {
+  if (!result.value) return
+  const title = store.snapshot?.title ?? 'export'
+  const output = fileOutput.value
+  const blob = new Blob([output], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${title}_preview.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// Download real CSV via r.php API (requires Pace API token in settings)
+async function downloadRealCsv(): Promise<void> {
   const models = store.models
   const title = store.snapshot?.title
   const model = title ? models.find((m) => m.title === title) : null
   if (!model) {
-    liveError.value = 'Kan het model niet vinden. Gebruik "Lezen" om het model eerst te laden.'
+    liveError.value = 'Model niet gevonden. Laad eerst een model.'
     return
   }
+
+  // Get API token from storage
+  const data = await chrome.storage.local.get('pace.apiToken')
+  const token = data['pace.apiToken']
+  if (!token) {
+    liveError.value = 'Geen Pace API token. Stel deze in bij Instellingen.'
+    return
+  }
+
   liveLoading.value = true
   liveError.value = ''
-  liveOutput.value = ''
   try {
-    const reply = await chrome.runtime.sendMessage<ExtensionMessage>({
-      type: 'PACE_RUN_LIVE_EXPORT',
-      blockId: model.id,
+    const resp = await fetch(`https://pace-bp.xsdirect.nl/r.php?_name=${encodeURIComponent(model.title)}`, {
+      headers: { 'X-Token': token },
     })
-    if (reply?.ok) {
-      liveOutput.value = reply.output
-      previewMode.value = 'live'
-    } else {
-      liveError.value = reply?.error ?? 'Export mislukt'
+    if (!resp.ok) {
+      liveError.value = `HTTP ${resp.status}: ${resp.statusText}`
+      return
     }
+    const output = await resp.text()
+    // Trigger download
+    const blob = new Blob([output], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${model.title}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   } catch (err) {
     liveError.value = (err as Error).message
   } finally {
     liveLoading.value = false
   }
 }
-
-// Parse live output into table rows
-const liveRows = computed(() => {
-  if (!liveOutput.value) return []
-  const text = liveOutput.value.replace(/&#9;/g, '\t')
-  const lines = text.split('\n').filter((l) => l.trim())
-  if (lines.length === 0) return []
-  const delim = detectDelimiter(lines[0])
-  return lines.map((line) => splitCsvRow(line, delim))
-})
 
 const autoFixture = computed(() => {
   if (!store.repeatingCode) return null
@@ -180,16 +194,16 @@ const originalDiff = computed(() => {
         <h2 class="text-sm font-semibold text-slate-700">Export preview</h2>
         <div class="flex gap-1">
           <button
-            class="rounded border px-2 py-0.5 text-[11px] font-medium"
-            :class="previewMode === 'sim' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600 hover:bg-slate-100'"
-            @click="previewMode = 'sim'"
-          >Simulatie</button>
+            class="rounded border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+            @click="downloadSimCsv"
+            title="Download gesimuleerde CSV (testdata)"
+          >Sim CSV</button>
           <button
-            class="rounded border px-2 py-0.5 text-[11px] font-medium"
-            :class="previewMode === 'live' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-300 text-slate-600 hover:bg-slate-100'"
+            class="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
             :disabled="liveLoading"
-            @click="runLiveExport"
-          >{{ liveLoading ? 'Laden...' : 'Live export' }}</button>
+            @click="downloadRealCsv"
+            title="Download echte export via Pace API"
+          >{{ liveLoading ? 'Laden...' : 'Echte CSV' }}</button>
           <button
             class="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100"
             @click="showRaw = !showRaw"
@@ -208,11 +222,11 @@ const originalDiff = computed(() => {
         Kolomnamen kunnen verschoven zijn. Controleer het template.
       </div>
 
-      <pre v-if="showRaw && previewMode === 'sim'" class="mono max-h-96 overflow-auto rounded border border-slate-200 bg-slate-900 p-2 text-xs text-slate-100 whitespace-pre-wrap break-all">{{ fileOutput || '(leeg)' }}</pre>
+      <p v-if="liveError" class="text-xs text-rose-700">{{ liveError }}</p>
 
-      <pre v-else-if="showRaw && previewMode === 'live' && liveOutput" class="mono max-h-96 overflow-auto rounded border border-slate-200 bg-slate-900 p-2 text-xs text-slate-100 whitespace-pre-wrap break-all">{{ liveOutput }}</pre>
+      <pre v-if="showRaw" class="mono max-h-96 overflow-auto rounded border border-slate-200 bg-slate-900 p-2 text-xs text-slate-100 whitespace-pre-wrap break-all">{{ fileOutput || '(leeg)' }}</pre>
 
-      <div v-else-if="previewMode === 'sim' && dataRows.length > 0" class="overflow-x-auto rounded border border-slate-200">
+      <div v-else-if="dataRows.length > 0" class="overflow-x-auto rounded border border-slate-200">
         <table class="w-full border-collapse text-[11px]">
           <thead>
             <tr class="bg-slate-100">
@@ -241,45 +255,9 @@ const originalDiff = computed(() => {
         </table>
       </div>
 
-      <!-- Live export output -->
-      <p v-else-if="previewMode === 'live' && liveError" class="text-xs text-rose-700">{{ liveError }}</p>
+      <p v-else-if="liveError" class="text-xs text-rose-700">{{ liveError }}</p>
 
-      <div v-else-if="previewMode === 'live' && liveRows.length > 0" class="overflow-x-auto rounded border border-emerald-200">
-        <div class="bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800">
-          Live data van Pace ({{ liveRows.length }} rijen)
-        </div>
-        <table class="w-full border-collapse text-[11px]">
-          <thead>
-            <tr class="bg-slate-100">
-              <th
-                v-for="(_, ci) in liveRows[0]"
-                :key="'lh'+ci"
-                class="whitespace-nowrap border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700"
-              >{{ liveRows[0][ci] || (ci + 1) }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(row, ri) in liveRows.slice(1)"
-              :key="'lr'+ri"
-              class="hover:bg-blue-50"
-              :class="ri % 2 === 1 ? 'bg-slate-50' : 'bg-white'"
-            >
-              <td
-                v-for="(cell, ci) in row"
-                :key="ci"
-                class="whitespace-nowrap border border-slate-200 px-2 py-1 text-slate-800"
-              >{{ cell || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p v-else-if="previewMode === 'live' && !liveLoading" class="text-xs text-slate-500 italic">
-        Klik "Live export" om echte data op te halen.
-      </p>
-
-      <p v-else-if="previewMode === 'sim' && dataRows.length === 0" class="text-xs text-slate-500 italic">Geen template geladen.</p>
+      <p v-else-if="dataRows.length === 0" class="text-xs text-slate-500 italic">Geen template geladen.</p>
     </div>
 
     <!-- Diff with original -->

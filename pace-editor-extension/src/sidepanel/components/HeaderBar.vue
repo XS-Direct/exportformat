@@ -19,6 +19,7 @@ const tabs: { id: typeof store.tab; label: string }[] = [
   { id: 'preview', label: 'Preview' },
   { id: 'simulator', label: 'Simulator' },
   { id: 'ai', label: 'AI' },
+  { id: 'monitor', label: 'Monitor' },
   { id: 'settings', label: 'Instellingen' },
 ]
 
