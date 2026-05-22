@@ -139,7 +139,7 @@ const GENERATORS: FieldGenerator[] = [
   { pattern: /\bland\b|country/i, generate: () => 'NL' },
 
   // Financial
-  { pattern: /amount|bedrag/i, generate: (i) => String(5 + i * 2.5) },
+  { pattern: /amount|bedrag/i, generate: (i) => (5 + i * 2.5).toFixed(2).replace('.', ',') },
   { pattern: /frequen(cy|tie)/i, generate: (i) => i % 3 === 0 ? 'month' : i % 3 === 1 ? 'single' : 'month' },
 
   // Date (generic — after specific date patterns)

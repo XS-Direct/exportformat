@@ -66,7 +66,8 @@ export function runSimulation(inputs: SimulationInputs): SimulationOutput {
       if (!ctx.vars.has(k)) ctx.vars.set(k, v)
     }
     const raw = evaluate(repeating, ctx)
-    combinedRows += raw
+    // Ensure each row ends with a newline (Pace adds \n between rows)
+    combinedRows += raw + (raw.endsWith('\n') ? '' : '\n')
     // Pace writes columns separated by the HTML tab entity (`&#9;`). The
     // entity is decoded to a real TAB at file-write time downstream, but
     // for column comparison we do the same decoding here.
@@ -93,7 +94,7 @@ export function runSimulation(inputs: SimulationInputs): SimulationOutput {
 
   return {
     rows,
-    combined: header + combinedRows + footer,
+    combined: (header ? header + (header.endsWith('\n') ? '' : '\n') : '') + combinedRows + footer,
   }
 }
 
