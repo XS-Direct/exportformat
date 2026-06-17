@@ -5,6 +5,23 @@ import { loadConfiguredHosts, BUILTIN_HOSTS } from '../shared/hosts'
 const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000 // 1 hour
 const GITHUB_RAW = 'https://raw.githubusercontent.com/XS-Direct/exportformat/main/pace-editor-extension/package.json'
 
+// Returns true only when `remote` is a strictly higher semver than `current`.
+// Using a real comparison (instead of `!==`) avoids a false "update available"
+// badge when running a dev build that is ahead of what's on GitHub main.
+function isRemoteNewer(remote: string, current: string): boolean {
+  const parse = (v: string) => v.split('.').map((n) => parseInt(n, 10) || 0)
+  const r = parse(remote)
+  const c = parse(current)
+  const len = Math.max(r.length, c.length)
+  for (let i = 0; i < len; i++) {
+    const a = r[i] ?? 0
+    const b = c[i] ?? 0
+    if (a > b) return true
+    if (a < b) return false
+  }
+  return false
+}
+
 async function checkForUpdate(): Promise<void> {
   try {
     const currentVersion = chrome.runtime.getManifest().version
@@ -12,7 +29,7 @@ async function checkForUpdate(): Promise<void> {
     if (!resp.ok) return
     const pkg = await resp.json()
     const remote = pkg.version
-    if (remote && remote !== currentVersion) {
+    if (remote && isRemoteNewer(remote, currentVersion)) {
       console.log(`[pace-editor] Update: ${currentVersion} → ${remote}`)
       await chrome.storage.local.set({ 'pace.update': { current: currentVersion, remote, ts: Date.now() } })
       chrome.action.setBadgeText({ text: '!' })

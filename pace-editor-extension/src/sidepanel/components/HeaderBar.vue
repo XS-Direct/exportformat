@@ -17,6 +17,7 @@ onMounted(async () => {
 const tabs: { id: typeof store.tab; label: string }[] = [
   { id: 'editor', label: 'Editor' },
   { id: 'preview', label: 'Preview' },
+  { id: 'export', label: 'Export' },
   { id: 'simulator', label: 'Simulator' },
   { id: 'ai', label: 'AI' },
   { id: 'monitor', label: 'Monitor' },

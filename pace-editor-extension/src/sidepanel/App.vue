@@ -6,6 +6,7 @@ import ClientPicker from './components/ClientPicker.vue'
 import HeaderBar from './components/HeaderBar.vue'
 import EditorPane from './components/EditorPane.vue'
 import PreviewPane from './components/PreviewPane.vue'
+import ExportPane from './components/ExportPane.vue'
 import SimulatorPane from './components/SimulatorPane.vue'
 import AiAssistant from './components/AiAssistant.vue'
 import MonitorPane from './components/MonitorPane.vue'
@@ -86,6 +87,7 @@ function backToPicker(): void {
 
       <EditorPane v-show="store.tab === 'editor'" />
       <PreviewPane v-show="store.tab === 'preview'" />
+      <ExportPane v-show="store.tab === 'export'" />
       <SimulatorPane v-show="store.tab === 'simulator'" />
       <AiAssistant v-show="store.tab === 'ai'" />
       <MonitorPane v-show="store.tab === 'monitor'" />

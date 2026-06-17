@@ -121,7 +121,7 @@ Geef de aangepaste REPEATING CODE in <template> tags.`
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-opus-4-8',
         max_tokens: 8192,
         system: systemPrompt.value,
         messages: [{ role: 'user', content: userMessage }],
@@ -185,6 +185,44 @@ const previewRows = computed(() => {
     return raw.split(delim).map((s) => s.replace(/^"|"$/g, '').trim())
   })
 })
+
+// Line-by-line diff between current and proposed code (LCS-based)
+interface DiffRow { type: 'same' | 'add' | 'del'; text: string }
+
+const diffRows = computed<DiffRow[]>(() => {
+  if (!proposedCode.value) return []
+  const oldLines = store.repeatingCode.split('\n')
+  const newLines = proposedCode.value.split('\n')
+  const n = oldLines.length
+  const m = newLines.length
+  // LCS length table
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = oldLines[i] === newLines[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  const rows: DiffRow[] = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (oldLines[i] === newLines[j]) {
+      rows.push({ type: 'same', text: oldLines[i] }); i++; j++
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      rows.push({ type: 'del', text: oldLines[i] }); i++
+    } else {
+      rows.push({ type: 'add', text: newLines[j] }); j++
+    }
+  }
+  while (i < n) { rows.push({ type: 'del', text: oldLines[i] }); i++ }
+  while (j < m) { rows.push({ type: 'add', text: newLines[j] }); j++ }
+  return rows
+})
+
+const addCount = computed(() => diffRows.value.filter((r) => r.type === 'add').length)
+const delCount = computed(() => diffRows.value.filter((r) => r.type === 'del').length)
 
 function applyProposal(): void {
   if (!proposedCode.value) return
@@ -347,20 +385,35 @@ function formatTime(ts: number): string {
         </table>
       </div>
 
-      <!-- Proposed code -->
-      <details class="rounded border border-slate-200">
-        <summary class="cursor-pointer bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
-          Voorgestelde code
-        </summary>
-        <pre class="mono max-h-48 overflow-auto bg-slate-900 p-2 text-[11px] text-slate-100 whitespace-pre-wrap break-all">{{ proposedCode }}</pre>
-      </details>
+      <!-- Diff: current vs proposed -->
+      <div class="rounded border border-slate-200">
+        <div class="flex items-center justify-between bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+          <span>Wijzigingen (huidig → voorstel)</span>
+          <span class="mono text-[11px]">
+            <span class="text-rose-600">−{{ delCount }}</span>
+            <span class="ml-1.5 text-emerald-600">+{{ addCount }}</span>
+          </span>
+        </div>
+        <div class="mono max-h-64 overflow-auto bg-slate-900 py-1 text-[11px] leading-relaxed">
+          <div
+            v-for="(row, ri) in diffRows"
+            :key="ri"
+            class="whitespace-pre-wrap break-all px-2"
+            :class="{
+              'bg-rose-900/40 text-rose-200': row.type === 'del',
+              'bg-emerald-900/40 text-emerald-200': row.type === 'add',
+              'text-slate-400': row.type === 'same',
+            }"
+          ><span class="select-none opacity-60">{{ row.type === 'add' ? '+ ' : row.type === 'del' ? '− ' : '  ' }}</span>{{ row.text }}</div>
+        </div>
+      </div>
 
-      <!-- Current code -->
+      <!-- Full proposed code (for copying) -->
       <details class="rounded border border-slate-200">
         <summary class="cursor-pointer bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500">
-          Huidige code (vergelijking)
+          Volledige voorgestelde code
         </summary>
-        <pre class="mono max-h-32 overflow-auto bg-slate-800 p-2 text-[11px] text-slate-400 whitespace-pre-wrap break-all">{{ store.repeatingCode }}</pre>
+        <pre class="mono max-h-48 overflow-auto bg-slate-900 p-2 text-[11px] text-slate-100 whitespace-pre-wrap break-all">{{ proposedCode }}</pre>
       </details>
 
       <div class="flex gap-2">
