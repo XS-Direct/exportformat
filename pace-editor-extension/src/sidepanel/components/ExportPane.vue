@@ -261,32 +261,33 @@ function stop(): void {
   }
 }
 
-// --- r.php: run the current export model -------------------------------------
-const includePeriodInRphp = ref(false)
+// --- r.php: run any download/export model by id ------------------------------
+// r.php takes `_id` (numeric model id) OR `_name` (title) and authenticates with
+// the X-Token header. It does NOT take dateStart/dateEnd — these models scope
+// their own data through their configured Pace filter.
+const selectedModelId = ref('')
 
-const currentModel = computed(() => {
-  const title = store.snapshot?.title
-  return title ? store.models.find((m) => m.title === title) ?? null : null
-})
+watch(
+  () => store.models,
+  (m) => {
+    if (selectedModelId.value && m.some((x) => x.id === selectedModelId.value)) return
+    if (!m.length) return
+    // Default to the model currently open in the editor, else the first one.
+    const cur = store.snapshot?.title ? m.find((x) => x.title === store.snapshot!.title) : null
+    selectedModelId.value = cur?.id ?? m[0].id
+  },
+  { immediate: true },
+)
 
-async function runCurrentExport(): Promise<void> {
-  const title = store.snapshot?.title
-  if (!title) {
-    resetRun('Huidige export')
-    fail('Geen model geladen.')
+async function runModelExport(): Promise<void> {
+  const model = store.models.find((m) => m.id === selectedModelId.value)
+  if (!model) {
+    resetRun('Export')
+    fail('Kies een model.')
     return
   }
-  let url = `${RPHP_BASE}?_name=${encParam(title)}`
-  if (includePeriodInRphp.value) {
-    const err = periodError.value
-    if (err) {
-      resetRun('Huidige export')
-      fail(err)
-      return
-    }
-    url += `&dateStart=${encParam(period.start)}&dateEnd=${encParam(period.end)}`
-  }
-  await doRun(url, `${title}.csv`, `Export: ${title}`)
+  const url = `${RPHP_BASE}?_id=${encParam(model.id)}`
+  await doRun(url, `${model.title}.csv`, `Export: ${model.title} (id ${model.id})`)
 }
 
 // --- DataBridge: run the selected endpoint -----------------------------------
@@ -421,23 +422,28 @@ const maxCols = computed(() =>
       <p v-if="periodError" class="text-[11px] font-medium text-rose-700">{{ periodError }}</p>
     </section>
 
-    <!-- Current export via r.php -->
+    <!-- Export model via r.php -->
     <section class="space-y-2 rounded border border-emerald-200 bg-emerald-50/40 p-2">
-      <h3 class="text-xs font-semibold text-slate-700">Huidige export (r.php)</h3>
+      <h3 class="text-xs font-semibold text-slate-700">Export-model draaien (r.php)</h3>
       <p class="text-[11px] text-slate-600">
-        Model:
-        <strong>{{ store.snapshot?.title || '—' }}</strong>
-        <span v-if="store.snapshot && !currentModel" class="text-amber-700"> (niet in modellijst gevonden)</span>
+        Kies een download/export-model en draai het direct via
+        <code class="rounded bg-white px-1">r.php?_id=…</code>.
       </p>
-      <label class="flex items-center gap-1.5 text-[11px] text-slate-600">
-        <input v-model="includePeriodInRphp" type="checkbox" />
-        Periode meesturen (experimenteel — alleen als het model dat ondersteunt)
-      </label>
+      <select v-model="selectedModelId" class="w-full rounded border border-slate-300 px-2 py-1 text-xs">
+        <option v-if="!store.models.length" value="">Geen modellen — open de Pace-modellenpagina en klik “Lezen”</option>
+        <option v-for="m in store.models" :key="m.id" :value="m.id">
+          {{ m.title }} (id {{ m.id }})
+        </option>
+      </select>
+      <p class="text-[10px] italic text-slate-500">
+        Deze modellen bepalen hun eigen datum-/databereik via hun Pace-filter. De periode-instelling
+        hierboven geldt alleen voor de DataBridge-endpoints.
+      </p>
       <button
         class="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-        :disabled="running || !store.snapshot?.title"
-        @click="runCurrentExport"
-      >Draai deze export</button>
+        :disabled="running || !selectedModelId"
+        @click="runModelExport"
+      >Draai export</button>
     </section>
 
     <!-- DataBridge endpoint runner -->
