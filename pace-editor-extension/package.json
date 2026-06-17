@@ -1,6 +1,6 @@
 {
   "name": "pace-editor-extension",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Chromium MV3 extension: visual editor for Pace export-model Repeating code.",
   "type": "module",

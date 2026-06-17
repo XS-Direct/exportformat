@@ -22,6 +22,12 @@ const tokenStored = computed(() => token.value.length > 0)
 const period = reactive({ start: '', end: '' })
 const maxPeriodDays = ref(DEFAULT_MAX_PERIOD_DAYS)
 
+// Row cap: limits how many data rows are pulled. 0 = no limit. Enforced two
+// ways — `_limit` is sent to the server (only honoured when the filter has
+// filter_limitmodel=1), and a hard client-side cap stops reading the stream
+// after N rows regardless, so the download never blows up.
+const maxRows = ref(100)
+
 const periodSpan = computed(() =>
   period.start && period.end ? daysBetween(period.start, period.end) : null,
 )
@@ -132,6 +138,7 @@ const result = reactive({
   rowCount: 0,
   columns: [] as string[],
   rows: [] as string[][],
+  limited: false,
 })
 
 function detectDelimiter(text: string): string {
@@ -172,6 +179,7 @@ function resetRun(label: string): void {
   result.rowCount = 0
   result.columns = []
   result.rows = []
+  result.limited = false
 }
 
 function fail(msg: string): void {
@@ -212,10 +220,13 @@ async function doRun(url: string, filename: string, label: string): Promise<void
     }
 
     run.step = 'downloading'
+    // Hard client-side cap: stop after header + maxRows data lines.
+    const cap = maxRows.value > 0 ? maxRows.value + 1 : Infinity
     const reader = resp.body?.getReader()
     const decoder = new TextDecoder()
     let text = ''
     let received = 0
+    let limited = false
     if (reader) {
       for (;;) {
         const { done, value } = await reader.read()
@@ -224,21 +235,31 @@ async function doRun(url: string, filename: string, label: string): Promise<void
           received += value.length
           run.bytes = received
           text += decoder.decode(value, { stream: true })
+          if (cap !== Infinity && (text.match(/\n/g)?.length ?? 0) >= cap) {
+            limited = true
+            await reader.cancel()
+            break
+          }
         }
       }
-      text += decoder.decode()
+      if (!limited) text += decoder.decode()
     } else {
       const buf = await resp.arrayBuffer()
       received = buf.byteLength
       run.bytes = received
       text = new TextDecoder().decode(buf)
     }
+    // Trim to the cap so a partial final line is dropped.
+    if (limited) {
+      text = text.split('\n').slice(0, cap).join('\n') + '\n'
+    }
     run.ms = Math.round(performance.now() - t0)
-    addLog(`✓ Ontvangen: ${formatBytes(received)} in ${run.ms} ms`, 'ok')
+    addLog(`✓ Ontvangen: ${formatBytes(received)} in ${run.ms} ms${limited ? ` (afgekapt op ${maxRows.value} regels)` : ''}`, 'ok')
 
     run.step = 'parsing'
     result.text = text
     result.filename = filename
+    result.limited = limited
     parseResult(text)
     addLog(`  Regels: ${result.rowCount}, kolommen: ${result.columns.length}`, 'info')
     run.step = 'done'
@@ -286,7 +307,8 @@ async function runModelExport(): Promise<void> {
     fail('Kies een model.')
     return
   }
-  const url = `${RPHP_BASE}?_id=${encParam(model.id)}`
+  let url = `${RPHP_BASE}?_id=${encParam(model.id)}`
+  if (maxRows.value > 0) url += `&_limit=0,${maxRows.value}`
   await doRun(url, `${model.title}.csv`, `Export: ${model.title} (id ${model.id})`)
 }
 
@@ -321,7 +343,10 @@ async function runEndpoint(): Promise<void> {
     else v = paramValues[p.name] ?? ''
     if (v !== '') parts.push(`${p.name}=${encParam(v)}`)
   }
-  const url = `${DATABRIDGE_BASE}/${ep.id}?${parts.join('&')}`
+  let url = `${DATABRIDGE_BASE}/${ep.id}?${parts.join('&')}`
+  if (maxRows.value > 0 && !ep.params.some((p) => p.name === '_limit')) {
+    url += `&_limit=0,${maxRows.value}`
+  }
   await doRun(url, `${ep.id}.csv`, `DataBridge: ${ep.label}`)
 }
 
@@ -344,9 +369,11 @@ onMounted(async () => {
     'pace.apiToken',
     'pace.export.period',
     'pace.export.maxPeriodDays',
+    'pace.export.maxRows',
   ])
   if (data['pace.apiToken']) token.value = data['pace.apiToken']
   if (data['pace.export.maxPeriodDays']) maxPeriodDays.value = data['pace.export.maxPeriodDays']
+  if (data['pace.export.maxRows'] !== undefined) maxRows.value = data['pace.export.maxRows']
   const p = data['pace.export.period']
   if (p?.start && p?.end) {
     period.start = p.start
@@ -359,6 +386,9 @@ onMounted(async () => {
 
 watch(maxPeriodDays, (v) => {
   void chrome.storage.local.set({ 'pace.export.maxPeriodDays': v })
+})
+watch(maxRows, (v) => {
+  void chrome.storage.local.set({ 'pace.export.maxRows': v })
 })
 watch(period, (p) => {
   void chrome.storage.local.set({ 'pace.export.period': { start: p.start, end: p.end } })
@@ -420,6 +450,20 @@ const maxCols = computed(() =>
         </span>
       </div>
       <p v-if="periodError" class="text-[11px] font-medium text-rose-700">{{ periodError }}</p>
+    </section>
+
+    <!-- Row cap -->
+    <section class="flex items-center gap-2 rounded border border-slate-200 bg-white p-2">
+      <label class="text-xs font-semibold text-slate-700">Max regels</label>
+      <input
+        v-model.number="maxRows"
+        type="number"
+        min="0"
+        class="w-24 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+      />
+      <span class="text-[11px] text-slate-500">
+        {{ maxRows > 0 ? `download stopt na ${maxRows} regels` : 'geen limiet (alles)' }}
+      </span>
     </section>
 
     <!-- Export model via r.php -->
@@ -535,7 +579,10 @@ const maxCols = computed(() =>
       class="space-y-2 rounded border border-slate-200 bg-white p-2"
     >
       <div class="flex items-center justify-between">
-        <span class="text-xs font-semibold text-slate-700">Resultaat — {{ result.rowCount }} regels</span>
+        <span class="text-xs font-semibold text-slate-700">
+          Resultaat — {{ result.rowCount }} regels
+          <span v-if="result.limited" class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">afgekapt op {{ maxRows }}</span>
+        </span>
         <button
           class="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-slate-900"
           @click="download"
