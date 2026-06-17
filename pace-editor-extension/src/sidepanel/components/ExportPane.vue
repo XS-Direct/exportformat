@@ -141,25 +141,50 @@ const result = reactive({
   limited: false,
 })
 
-function detectDelimiter(text: string): string {
-  const sample = text.split('\n').slice(0, 5).join('\n')
-  const tab = (sample.match(/\t/g) || []).length
-  const semi = (sample.match(/;/g) || []).length
-  const comma = (sample.match(/,/g) || []).length
+function detectDelimiter(sample: string): string {
+  // Count delimiters OUTSIDE quotes so embedded ';' in quoted fields don't win.
+  let tab = 0, semi = 0, comma = 0, inQ = false
+  for (const ch of sample) {
+    if (ch === '"') inQ = !inQ
+    else if (inQ) continue
+    else if (ch === '\t') tab++
+    else if (ch === ';') semi++
+    else if (ch === ',') comma++
+  }
   if (tab >= semi && tab >= comma && tab > 0) return '\t'
   if (semi >= comma && semi > 0) return ';'
   if (comma > 0) return ','
   return '\t'
 }
 
+// Quote-aware field split: "a;b";c → ['a;b', 'c']. Without this, ';' inside a
+// quoted field (e.g. the Optin/Optout columns) creates phantom columns.
+function splitRow(line: string, delim: string): string[] {
+  const cells: string[] = []
+  let cur = '', inQ = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQ) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++ }
+      else if (ch === '"') inQ = false
+      else cur += ch
+    } else if (ch === '"') inQ = true
+    else if (ch === delim) { cells.push(cur); cur = '' }
+    else cur += ch
+  }
+  cells.push(cur)
+  return cells
+}
+
 function parseResult(text: string): void {
-  const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.length > 0)
+  // Pace uses the literal tab entity &#9; as a separator in some models —
+  // normalise it to a real tab before detecting/splitting.
+  const lines = text.replace(/\r\n/g, '\n').replace(/&#9;/g, '\t').split('\n').filter((l) => l.length > 0)
   result.rowCount = lines.length
-  const delim = detectDelimiter(text)
-  const split = (l: string) => l.split(delim)
-  result.columns = lines.length ? split(lines[0]) : []
+  const delim = detectDelimiter(lines.slice(0, 5).join('\n'))
+  result.columns = lines.length ? splitRow(lines[0], delim) : []
   // Cap the on-screen preview; the full payload stays in result.text for download.
-  result.rows = lines.slice(0, 200).map(split)
+  result.rows = lines.slice(0, 200).map((l) => splitRow(l, delim))
 }
 
 function formatBytes(n: number): string {
