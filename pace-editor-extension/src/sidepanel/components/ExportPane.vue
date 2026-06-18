@@ -28,6 +28,27 @@ const maxPeriodDays = ref(DEFAULT_MAX_PERIOD_DAYS)
 // after N rows regardless, so the download never blows up.
 const maxRows = ref(100)
 
+// Free-form filter parameters (one `name=value` per line). Pace filters read
+// QS-operator values straight from the query string by alias name, so this
+// lets the plugin drive ANY dynamically-configured filter (clientId, method,
+// dateExport, …) without hardcoding the alias names.
+const extraParams = ref('')
+
+function extraQuery(): string {
+  return extraParams.value
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const i = l.indexOf('=')
+      if (i < 1) return ''
+      const k = l.slice(0, i).trim()
+      const v = l.slice(i + 1).trim()
+      return k ? `&${encParam(k)}=${encParam(v)}` : ''
+    })
+    .join('')
+}
+
 const periodSpan = computed(() =>
   period.start && period.end ? daysBetween(period.start, period.end) : null,
 )
@@ -332,7 +353,19 @@ async function runModelExport(): Promise<void> {
     fail('Kies een model.')
     return
   }
+  // These download models scope their data through filter aliases that r.php
+  // reads straight from the query string (QS operators). Without dateStart/
+  // dateEnd the filter is unbounded → full history → gateway timeout (504).
+  // So a valid period is required.
+  const err = periodError.value
+  if (err) {
+    resetRun(`Export: ${model.title}`)
+    fail(err)
+    return
+  }
   let url = `${RPHP_BASE}?_id=${encParam(model.id)}`
+    + `&dateStart=${encParam(period.start)}&dateEnd=${encParam(period.end)}`
+  url += extraQuery()
   if (maxRows.value > 0) url += `&_limit=0,${maxRows.value}`
   await doRun(url, `${model.title}.csv`, `Export: ${model.title} (id ${model.id})`)
 }
@@ -395,10 +428,12 @@ onMounted(async () => {
     'pace.export.period',
     'pace.export.maxPeriodDays',
     'pace.export.maxRows',
+    'pace.export.extraParams',
   ])
   if (data['pace.apiToken']) token.value = data['pace.apiToken']
   if (data['pace.export.maxPeriodDays']) maxPeriodDays.value = data['pace.export.maxPeriodDays']
   if (data['pace.export.maxRows'] !== undefined) maxRows.value = data['pace.export.maxRows']
+  if (data['pace.export.extraParams']) extraParams.value = data['pace.export.extraParams']
   const p = data['pace.export.period']
   if (p?.start && p?.end) {
     period.start = p.start
@@ -414,6 +449,9 @@ watch(maxPeriodDays, (v) => {
 })
 watch(maxRows, (v) => {
   void chrome.storage.local.set({ 'pace.export.maxRows': v })
+})
+watch(extraParams, (v) => {
+  void chrome.storage.local.set({ 'pace.export.extraParams': v })
 })
 watch(period, (p) => {
   void chrome.storage.local.set({ 'pace.export.period': { start: p.start, end: p.end } })
@@ -505,9 +543,18 @@ const maxCols = computed(() =>
         </option>
       </select>
       <p class="text-[10px] italic text-slate-500">
-        Deze modellen bepalen hun eigen datum-/databereik via hun Pace-filter. De periode-instelling
-        hierboven geldt alleen voor de DataBridge-endpoints.
+        De periode hierboven wordt als <code>dateStart</code>/<code>dateEnd</code> meegestuurd (filter-aliassen).
+        Zonder periode draait de filter onbegrensd → kans op 504-timeout.
       </p>
+      <label class="block text-[11px] text-slate-600">
+        Extra filter-parameters (één per regel, <code>naam=waarde</code>)
+        <textarea
+          v-model="extraParams"
+          rows="2"
+          class="mt-0.5 block w-full rounded border border-slate-300 px-2 py-1 font-mono text-[11px]"
+          placeholder="clientId=36&#10;method=door-to-door"
+        ></textarea>
+      </label>
       <button
         class="rounded bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         :disabled="running || !selectedModelId"
